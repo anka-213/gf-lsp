@@ -47,6 +47,8 @@ import           System.Directory (createDirectoryIfMissing, copyFile)
 import qualified GF
 import qualified GF.Infra.Option as GF
 
+import GFExtras
+
 import System.Environment (withArgs)
 import System.IO (hPutStrLn, stderr)
 import qualified GF.Support as GF
@@ -339,13 +341,6 @@ callGF doc (Just filename) = do
   liftIO $ debugM "reactor.handle" "Ran GF"
 
   mkDiagnostics doc r
-  -- case r of
-  --   (GF.Ok unit) -> pure ()
-  --   (GF.Bad msg) -> do
-  --     liftIO $ warningM "reactor.handle" $ "Got error " ++ msg
-  --     -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
-  --     -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
-  --     sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
 
 mkDiagnostics :: J.Uri -> GF.Err (UTCTime, (GF.ModuleName, GF.Grammar)) -> LspT Config IO ()
@@ -394,7 +389,5 @@ mkRange l1 c1 l2 c2 = J.Range (J.Position l1' c1') (J.Position l2' c2')
 split :: Eq a => a -> [a] -> [[a]]
 split d [] = []
 split d s = x : split d (drop 1 y) where (x,y) = span (/= d) s
-
--- mkDiagnostics
 
 -- ---------------------------------------------------------------------
