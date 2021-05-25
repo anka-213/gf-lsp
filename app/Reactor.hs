@@ -383,12 +383,18 @@ parseErrorMessage :: String -> Maybe J.Range
 parseErrorMessage msg
   | (filename : line : col : _ ) <- split ':' msg
   , [(l,"")] <- reads line
-  , [(c,"")] <- reads col = Just $ mkRange l c
+  , [(c,"")] <- reads col = Just $ mkRange l c l (c+1)
+  | (filename : line : _ ) <- split ':' msg
+  , [(l,"")] <- reads line = Just $ mkRange l 1 (l+1) 1
   | otherwise = Nothing
 
-mkRange :: Int -> Int -> J.Range
-mkRange l c = J.Range (J.Position l' c') (J.Position l' (c' + 1))
-  where l' = l - 1; c' = c - 1
+mkRange :: Int -> Int -> Int -> Int -> J.Range
+mkRange l1 c1 l2 c2 = J.Range (J.Position l1' c1') (J.Position l2' c2')
+  where
+    l1' = l1 - 1
+    c1' = c1 - 1
+    l2' = l2 - 1
+    c2' = c2 - 1
 
 split :: Eq a => a -> [a] -> [[a]]
 split d [] = []
