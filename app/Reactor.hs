@@ -51,14 +51,9 @@ import System.Environment (withArgs)
 import System.IO (hPutStrLn, stderr)
 import qualified GF.Support as GF
 import qualified GF.Compile as S
-import GF.Infra.Option hiding (Options)
 import GF.Compiler (linkGrammars)
-import GF.CompileInParallel
-import GF.Compile.ConcreteToHaskell
-import GF.Compile
-import GF.Text.Pretty hiding ((<>))
-import GF.Grammar.CanonicalJSON
 import Data.Maybe (fromMaybe)
+import Data.Time (UTCTime)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -340,7 +335,7 @@ callGF doc (Just filename) = do
          }
   -- let flags = defaultFlags
   -- compileSourceFiles
-  r <- liftIO $ GF.tryIOE $ compileSourceFiles opts [filename]
+  r <- liftIO $ GF.tryIOE $ S.batchCompile opts [filename]
   liftIO $ debugM "reactor.handle" "Ran GF"
 
   mkDiagnostics doc r
@@ -353,8 +348,8 @@ callGF doc (Just filename) = do
   --     sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
 
-mkDiagnostics :: J.Uri -> GF.Err () -> LspT Config IO ()
-mkDiagnostics doc (GF.Ok ()) = do
+mkDiagnostics :: J.Uri -> GF.Err (UTCTime, (GF.ModuleName, GF.Grammar)) -> LspT Config IO ()
+mkDiagnostics doc (GF.Ok x) = do
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
 mkDiagnostics doc (GF.Bad msg) = do
@@ -403,47 +398,3 @@ split d s = x : split d (drop 1 y) where (x,y) = span (/= d) s
 -- mkDiagnostics
 
 -- ---------------------------------------------------------------------
-
-compileSourceFiles :: GF.Options -> [FilePath] -> GF.IOE ()
-compileSourceFiles opts fs =
-    do output <- batchCompile opts fs
-       exportCanonical output
-       unless (flag optStopAfterPhase opts == Compile) $
-           linkGrammars opts output
-  where
-    batchCompile = maybe batchCompile' parallelBatchCompile (flag optJobs opts)
-    batchCompile' opts fs = do (t,cnc_gr) <- S.batchCompile opts fs
-                               return (t,[cnc_gr])
-
-    exportCanonical (_time, canonical) =
-      do when (FmtHaskell `elem` ofmts && haskellOption opts HaskellConcrete) $
-           mapM_ cnc2haskell canonical
-         when (FmtCanonicalGF `elem` ofmts) $
-           do createDirectoryIfMissing False "canonical"
-              mapM_ abs2canonical canonical
-              mapM_ cnc2canonical canonical
-         when (FmtCanonicalJson `elem` ofmts) $ mapM_ grammar2json canonical
-      where
-        ofmts = flag optOutputFormats opts
-
-    cnc2haskell (cnc,gr) =
-      do mapM_ writeExport $ concretes2haskell opts (srcAbsName gr cnc) gr
-
-    abs2canonical (cnc,gr) =
-        writeExport ("canonical/"++render absname++".gf",render80 canAbs)
-      where
-        absname = srcAbsName gr cnc
-        canAbs = GF.abstract2canonical absname gr
-
-    cnc2canonical (cnc,gr) =
-      mapM_ (writeExport.fmap render80) $
-            GF.concretes2canonical opts (srcAbsName gr cnc) gr
-
-    grammar2json (cnc,gr) = encodeJSON (render absname ++ ".json") gr_canon
-      where absname = srcAbsName gr cnc
-            gr_canon = GF.grammar2canonical opts absname gr
-
-    writeExport (path,s) = writing opts path $ GF.writeUTF8File path s
-
-writing opts path io =
-    GF.putPointE Normal opts ("Writing " ++ path ++ "...") $ liftIO io

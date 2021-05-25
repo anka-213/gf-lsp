@@ -35,6 +35,7 @@ executable gf-lsp
                     , lsp-types
                     , stm
                     , text
+                    , time
                     , unordered-containers
                     , gf
 
