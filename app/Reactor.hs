@@ -24,6 +24,7 @@ and plug it into your client of choice.
 -}
 module Main (main) where
 import           Control.Concurrent.STM.TChan
+import           Control.Concurrent.STM.TVar
 import qualified Control.Exception                     as E
 import           Control.Lens hiding (Iso)
 import           Control.Monad
@@ -72,6 +73,7 @@ main = do
 
 -- ---------------------------------------------------------------------
 
+data LspContext = LspContext { compileEnv :: TVar CompileEnv , config :: Config }
 data Config = Config { fooTheBar :: Bool, wibbleFactor :: Int }
   deriving (Generic, J.ToJSON, J.FromJSON, Show)
 
@@ -79,14 +81,15 @@ run :: IO Int
 run = flip E.catches handlers $ do
 
   rin  <- atomically newTChan :: IO (TChan ReactorInput)
+  cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
 
   let
     serverDefinition = ServerDefinition
-      { defaultConfig = Config {fooTheBar = False, wibbleFactor = 0 }
-      , onConfigurationChange = \_old v -> do
+      { defaultConfig = LspContext { compileEnv = cEnv, config = Config {fooTheBar = False, wibbleFactor = 0 }}
+      , onConfigurationChange = \old v -> do
           case J.fromJSON v of
             J.Error e -> Left (T.pack e)
-            J.Success cfg -> Right cfg
+            J.Success cfg -> Right $ old {config = cfg }
       , doInitialize = \env _ -> forkIO (reactor rin) >> pure (Right env)
       , staticHandlers = lspHandlers rin
       , interpretHandler = \env -> Iso (runLspT env) liftIO
@@ -134,7 +137,7 @@ data ReactorInput
 
 -- | Analyze the file and send any diagnostics to the client in a
 -- "textDocument/publishDiagnostics" notification
-sendDiagnostics :: T.Text -> J.NormalizedUri -> Maybe Int -> LspM Config ()
+sendDiagnostics :: T.Text -> J.NormalizedUri -> Maybe Int -> LspM LspContext ()
 sendDiagnostics msg fileUri version = do
   let
     diags = [J.Diagnostic
@@ -172,46 +175,46 @@ reactor inp = do
 
 -- | Check if we have a handler, and if we create a haskell-lsp handler to pass it as
 -- input into the reactor
-lspHandlers :: TChan ReactorInput -> Handlers (LspM Config)
+lspHandlers :: TChan ReactorInput -> Handlers (LspM LspContext)
 lspHandlers rin = mapHandlers goReq goNot handle
   where
-    goReq :: forall (a :: J.Method J.FromClient J.Request). Handler (LspM Config) a -> Handler (LspM Config) a
+    goReq :: forall (a :: J.Method J.FromClient J.Request). Handler (LspM LspContext) a -> Handler (LspM LspContext) a
     goReq f = \msg k -> do
       env <- getLspEnv
       liftIO $ atomically $ writeTChan rin $ ReactorAction (runLspT env $ f msg k)
 
-    goNot :: forall (a :: J.Method J.FromClient J.Notification). Handler (LspM Config) a -> Handler (LspM Config) a
+    goNot :: forall (a :: J.Method J.FromClient J.Notification). Handler (LspM LspContext) a -> Handler (LspM LspContext) a
     goNot f = \msg -> do
       env <- getLspEnv
       liftIO $ atomically $ writeTChan rin $ ReactorAction (runLspT env $ f msg)
 
 -- | Where the actual logic resides for handling requests and notifications.
-handle :: Handlers (LspM Config)
+handle :: Handlers (LspM LspContext)
 handle = mconcat
   [ notificationHandler J.SInitialized $ \_msg -> do
       liftIO $ debugM "reactor.handle" "Processing the Initialized notification"
 
-      -- We're initialized! Lets send a showMessageRequest now
-      let params = J.ShowMessageRequestParams
-                         J.MtWarning
-                         "What's your favourite language extension?"
-                         (Just [J.MessageActionItem "Rank2Types", J.MessageActionItem "NPlusKPatterns"])
+      -- -- We're initialized! Lets send a showMessageRequest now
+      -- let params = J.ShowMessageRequestParams
+      --                    J.MtWarning
+      --                    "What's your favourite language extension?"
+      --                    (Just [J.MessageActionItem "Rank2Types", J.MessageActionItem "NPlusKPatterns"])
 
-      void $ sendRequest J.SWindowShowMessageRequest params $ \case
-          Left e -> liftIO $ errorM "reactor.handle" $ "Got an error: " ++ show e
-          Right _ -> do
-            sendNotification J.SWindowShowMessage (J.ShowMessageParams J.MtInfo "Excellent choice")
+      -- void $ sendRequest J.SWindowShowMessageRequest params $ \case
+      --     Left e -> liftIO $ errorM "reactor.handle" $ "Got an error: " ++ show e
+      --     Right _ -> do
+      --       sendNotification J.SWindowShowMessage (J.ShowMessageParams J.MtInfo "Excellent choice")
 
-            -- We can dynamically register a capability once the user accepts it
-            sendNotification J.SWindowShowMessage (J.ShowMessageParams J.MtInfo "Turning on code lenses dynamically")
+      --       -- We can dynamically register a capability once the user accepts it
+      --       sendNotification J.SWindowShowMessage (J.ShowMessageParams J.MtInfo "Turning on code lenses dynamically")
 
-            let regOpts = J.CodeLensRegistrationOptions Nothing Nothing (Just False)
+      --       let regOpts = J.CodeLensRegistrationOptions Nothing Nothing (Just False)
 
-            void $ registerCapability J.STextDocumentCodeLens regOpts $ \_req responder -> do
-              liftIO $ debugM "reactor.handle" "Processing a textDocument/codeLens request"
-              let cmd = J.Command "Say hello" "lsp-hello-command" Nothing
-                  rsp = J.List [J.CodeLens (J.mkRange 0 0 0 100) (Just cmd) Nothing]
-              responder (Right rsp)
+      --       void $ registerCapability J.STextDocumentCodeLens regOpts $ \_req responder -> do
+      --         liftIO $ debugM "reactor.handle" "Processing a textDocument/codeLens request"
+      --         let cmd = J.Command "Say hello" "lsp-hello-command" Nothing
+      --             rsp = J.List [J.CodeLens (J.mkRange 0 0 0 100) (Just cmd) Nothing]
+      --         responder (Right rsp)
 
   , notificationHandler J.STextDocumentDidOpen $ \msg -> do
     let doc  = msg ^. J.params . J.textDocument . J.uri
@@ -221,7 +224,7 @@ handle = mconcat
     callGF doc fileName
 
   , notificationHandler J.SWorkspaceDidChangeConfiguration $ \msg -> do
-      cfg <- getConfig
+      cfg <- config <$> getConfig
       liftIO $ debugM "configuration changed: " (show (msg,cfg))
       sendNotification J.SWindowShowMessage $
         J.ShowMessageParams J.MtInfo $ "Wibble factor set to " <> T.pack (show (wibbleFactor cfg))
@@ -316,7 +319,7 @@ handle = mconcat
 outputDir :: String
 outputDir = "generated"
 
-callGF :: J.Uri -> Maybe FilePath -> LspM Config ()
+callGF :: J.Uri -> Maybe FilePath -> LspM LspContext ()
 callGF _ Nothing = do
   liftIO $ hPutStrLn stderr "No file"
 callGF doc (Just filename) = do
@@ -343,7 +346,7 @@ callGF doc (Just filename) = do
   mkDiagnostics doc r
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
 
-mkDiagnostics :: J.Uri -> GF.Err (UTCTime, (GF.ModuleName, GF.Grammar)) -> LspT Config IO ()
+mkDiagnostics :: J.Uri -> GF.Err (UTCTime, (GF.ModuleName, GF.Grammar)) -> LspT LspContext IO ()
 mkDiagnostics doc (GF.Ok x) = do
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
