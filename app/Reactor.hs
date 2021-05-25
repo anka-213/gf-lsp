@@ -49,6 +49,15 @@ import qualified GF.Infra.Option as GF
 
 import System.Environment (withArgs)
 import System.IO (hPutStrLn, stderr)
+import qualified GF.Support as GF
+import qualified GF.Compile as S
+import GF.Infra.Option hiding (Options)
+import GF.Compiler (linkGrammars)
+import GF.CompileInParallel
+import GF.Compile.ConcreteToHaskell
+import GF.Compile
+import GF.Text.Pretty hiding ((<>))
+import GF.Grammar.CanonicalJSON
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -127,15 +136,15 @@ data ReactorInput
 
 -- | Analyze the file and send any diagnostics to the client in a
 -- "textDocument/publishDiagnostics" notification
-sendDiagnostics :: J.NormalizedUri -> Maybe Int -> LspM Config ()
-sendDiagnostics fileUri version = do
+sendDiagnostics :: T.Text -> J.NormalizedUri -> Maybe Int -> LspM Config ()
+sendDiagnostics msg fileUri version = do
   let
     diags = [J.Diagnostic
               (J.Range (J.Position 0 1) (J.Position 0 5))
               (Just J.DsWarning)  -- severity
               Nothing  -- code
               (Just "lsp-hello") -- source
-              "Example diagnostic message"
+              msg
               Nothing -- tags
               (Just (J.List []))
             ]
@@ -210,8 +219,8 @@ handle = mconcat
     let doc  = msg ^. J.params . J.textDocument . J.uri
         fileName =  J.uriToFilePath doc
     liftIO $ debugM "reactor.handle" $ "Processing DidOpenTextDocument for: " ++ show fileName
-    sendDiagnostics (J.toNormalizedUri doc) (Just 0)
-    liftIO $ callGF fileName
+    -- sendDiagnostics "Example message" (J.toNormalizedUri doc) (Just 0)
+    callGF doc fileName
 
   , notificationHandler J.SWorkspaceDidChangeConfiguration $ \msg -> do
       cfg <- getConfig
@@ -236,8 +245,8 @@ handle = mconcat
       let doc = msg ^. J.params . J.textDocument . J.uri
           fileName = J.uriToFilePath doc
       liftIO $ debugM "reactor.handle" $ "Processing DidSaveTextDocument  for: " ++ show fileName
-      sendDiagnostics (J.toNormalizedUri doc) Nothing
-      liftIO $ callGF fileName
+      -- sendDiagnostics "Example message" (J.toNormalizedUri doc) Nothing
+      callGF doc fileName
 
   , requestHandler J.STextDocumentRename $ \req responder -> do
       liftIO $ debugM "reactor.handle" "Processing a textDocument/rename request"
@@ -260,7 +269,7 @@ handle = mconcat
           ms = J.HoverContents $ J.markedUpContent "lsp-hello" "Your type info here!"
           range = J.Range pos pos
           fileName = J.uriToFilePath $ doc ^. J.uri
-      -- liftIO $ callGF fileName
+      -- callGF fileName
       responder (Right $ Just rsp)
 
   , requestHandler J.STextDocumentDocumentSymbol $ \req responder -> do
@@ -309,10 +318,10 @@ handle = mconcat
 outputDir :: String
 outputDir = "generated"
 
-callGF :: Maybe FilePath -> LspM Config()
-callGF Nothing = do
+callGF :: J.Uri -> Maybe FilePath -> LspM Config ()
+callGF _ Nothing = do
   liftIO $ hPutStrLn stderr "No file"
-callGF (Just filename) = do
+callGF doc (Just filename) = do
   -- mkdir
   liftIO $ debugM "reactor.handle" "Starting GF"
   liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
@@ -329,7 +338,54 @@ callGF (Just filename) = do
          }
   -- let flags = defaultFlags
   -- compileSourceFiles
-  liftIO $ GF.mainOpts opts [filename]
+  r <- liftIO $ GF.tryIOE $ compileSourceFiles opts [filename]
+  case r of
+    (GF.Ok unit) -> pure ()
+    (GF.Bad msg) -> sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 0)
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
 
 -- ---------------------------------------------------------------------
+
+compileSourceFiles :: GF.Options -> [FilePath] -> GF.IOE ()
+compileSourceFiles opts fs =
+    do output <- batchCompile opts fs
+       exportCanonical output
+       unless (flag optStopAfterPhase opts == Compile) $
+           linkGrammars opts output
+  where
+    batchCompile = maybe batchCompile' parallelBatchCompile (flag optJobs opts)
+    batchCompile' opts fs = do (t,cnc_gr) <- S.batchCompile opts fs
+                               return (t,[cnc_gr])
+
+    exportCanonical (_time, canonical) =
+      do when (FmtHaskell `elem` ofmts && haskellOption opts HaskellConcrete) $
+           mapM_ cnc2haskell canonical
+         when (FmtCanonicalGF `elem` ofmts) $
+           do createDirectoryIfMissing False "canonical"
+              mapM_ abs2canonical canonical
+              mapM_ cnc2canonical canonical
+         when (FmtCanonicalJson `elem` ofmts) $ mapM_ grammar2json canonical
+      where
+        ofmts = flag optOutputFormats opts
+
+    cnc2haskell (cnc,gr) =
+      do mapM_ writeExport $ concretes2haskell opts (srcAbsName gr cnc) gr
+
+    abs2canonical (cnc,gr) =
+        writeExport ("canonical/"++render absname++".gf",render80 canAbs)
+      where
+        absname = srcAbsName gr cnc
+        canAbs = GF.abstract2canonical absname gr
+
+    cnc2canonical (cnc,gr) =
+      mapM_ (writeExport.fmap render80) $
+            GF.concretes2canonical opts (srcAbsName gr cnc) gr
+
+    grammar2json (cnc,gr) = encodeJSON (render absname ++ ".json") gr_canon
+      where absname = srcAbsName gr cnc
+            gr_canon = GF.grammar2canonical opts absname gr
+
+    writeExport (path,s) = writing opts path $ GF.writeUTF8File path s
+
+writing opts path io =
+    GF.putPointE Normal opts ("Writing " ++ path ++ "...") $ liftIO io
