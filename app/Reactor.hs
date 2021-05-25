@@ -39,9 +39,16 @@ import qualified Language.LSP.Types            as J
 import qualified Language.LSP.Types.Lens       as J
 import           Language.LSP.VFS
 import           System.Exit
-import           System.Log.Logger
+import System.Log.Logger
+    ( errorM, debugM, removeAllHandlers, Priority(DEBUG) )
 import           Control.Concurrent
+import           System.Directory (createDirectoryIfMissing, copyFile)
 
+import qualified GF
+-- import qualified GF.Infra.Option as GF
+
+import System.Environment (withArgs)
+import System.IO (hPutStrLn, stderr)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -114,8 +121,9 @@ lspOptions = defaultOptions
 -- LSP client, so they can be sent to the backend compiler one at a time, and a
 -- reply sent.
 
-newtype ReactorInput
+data ReactorInput
   = ReactorAction (IO ())
+  | Diagnostics
 
 -- | Analyze the file and send any diagnostics to the client in a
 -- "textDocument/publishDiagnostics" notification
@@ -142,8 +150,18 @@ reactor :: TChan ReactorInput -> IO ()
 reactor inp = do
   debugM "reactor" "Started the reactor"
   forever $ do
-    ReactorAction act <- atomically $ readTChan inp
-    act
+    input <- atomically $ readTChan inp
+    case input of
+      ReactorAction act -> act
+      Diagnostics -> do
+        withArgs
+          [ "-make",
+            "--output-dir=generated",
+            "--gfo-dir=generated",
+            -- "-v=0",
+            "Foo.gf"
+          ]
+          GF.main
 
 -- | Check if we have a handler, and if we create a haskell-lsp handler to pass it as
 -- input into the reactor
@@ -193,6 +211,7 @@ handle = mconcat
         fileName =  J.uriToFilePath doc
     liftIO $ debugM "reactor.handle" $ "Processing DidOpenTextDocument for: " ++ show fileName
     sendDiagnostics (J.toNormalizedUri doc) (Just 0)
+    liftIO $ callGF fileName
 
   , notificationHandler J.SWorkspaceDidChangeConfiguration $ \msg -> do
       cfg <- getConfig
@@ -218,6 +237,7 @@ handle = mconcat
           fileName = J.uriToFilePath doc
       liftIO $ debugM "reactor.handle" $ "Processing DidSaveTextDocument  for: " ++ show fileName
       sendDiagnostics (J.toNormalizedUri doc) Nothing
+      liftIO $ callGF fileName
 
   , requestHandler J.STextDocumentRename $ \req responder -> do
       liftIO $ debugM "reactor.handle" "Processing a textDocument/rename request"
@@ -234,11 +254,13 @@ handle = mconcat
 
   , requestHandler J.STextDocumentHover $ \req responder -> do
       liftIO $ debugM "reactor.handle" "Processing a textDocument/hover request"
-      let J.HoverParams _doc pos _workDone = req ^. J.params
+      let J.HoverParams doc pos _workDone = req ^. J.params
           J.Position _l _c' = pos
           rsp = J.Hover ms (Just range)
           ms = J.HoverContents $ J.markedUpContent "lsp-hello" "Your type info here!"
           range = J.Range pos pos
+          fileName = J.uriToFilePath $ doc ^. J.uri
+      -- liftIO $ callGF fileName
       responder (Right $ Just rsp)
 
   , requestHandler J.STextDocumentDocumentSymbol $ \req responder -> do
@@ -283,5 +305,30 @@ handle = mconcat
           update (ProgressAmount (Just (i * 10)) (Just "Doing stuff"))
           liftIO $ threadDelay (1 * 1000000)
   ]
+
+outputDir :: String
+outputDir = "generated"
+
+callGF :: Maybe FilePath -> IO ()
+callGF Nothing = do
+  hPutStrLn stderr "No file"
+callGF (Just filename) = do
+  -- mkdir
+  liftIO $ debugM "reactor.handle" "Starting GF"
+  hPutStrLn stderr $ "Starting gf for " ++ filename
+
+  createDirectoryIfMissing False outputDir
+  -- optOutputDir
+  -- optGFODir
+  -- let flags = defaultFlags
+  withArgs
+    [ "-make",
+      "--output-dir=" ++ outputDir,
+      "--gfo-dir=" ++ outputDir,
+      -- "-v=0",
+      filename
+    ]
+    GF.main
+  hPutStrLn stderr $ "Done with gf for " ++ filename
 
 -- ---------------------------------------------------------------------

@@ -28,6 +28,7 @@ executable gf-lsp
   build-depends:      base
                     , gf-lsp
                     , aeson
+                    , directory
                     , hslogger
                     , lens
                     , lsp
@@ -46,3 +47,4 @@ test-suite gf-lsp-tests
   build-depends:    base >=4.11 && < 5
                   , gf-lsp
                   , hedgehog
+                  , lsp-test
