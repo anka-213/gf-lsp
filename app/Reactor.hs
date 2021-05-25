@@ -309,15 +309,15 @@ handle = mconcat
 outputDir :: String
 outputDir = "generated"
 
-callGF :: Maybe FilePath -> IO ()
+callGF :: Maybe FilePath -> LspM Config()
 callGF Nothing = do
-  hPutStrLn stderr "No file"
+  liftIO $ hPutStrLn stderr "No file"
 callGF (Just filename) = do
   -- mkdir
   liftIO $ debugM "reactor.handle" "Starting GF"
-  hPutStrLn stderr $ "Starting gf for " ++ filename
+  liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
 
-  createDirectoryIfMissing False outputDir
+  liftIO $ createDirectoryIfMissing False outputDir
   -- optOutputDir
   -- optGFODir
   let defaultFlags = GF.flag id GF.noOptions
@@ -329,7 +329,7 @@ callGF (Just filename) = do
          }
   -- let flags = defaultFlags
   -- compileSourceFiles
-  GF.mainOpts opts [filename]
-  hPutStrLn stderr $ "Done with gf for " ++ filename
+  liftIO $ GF.mainOpts opts [filename]
+  liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
 
 -- ---------------------------------------------------------------------
