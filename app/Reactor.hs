@@ -40,7 +40,7 @@ import qualified Language.LSP.Types.Lens       as J
 import           Language.LSP.VFS
 import           System.Exit
 import System.Log.Logger
-    ( errorM, debugM, removeAllHandlers, Priority(DEBUG) )
+    ( errorM, debugM, removeAllHandlers, Priority(DEBUG), warningM )
 import           Control.Concurrent
 import           System.Directory (createDirectoryIfMissing, copyFile)
 
@@ -58,6 +58,7 @@ import GF.Compile.ConcreteToHaskell
 import GF.Compile
 import GF.Text.Pretty hiding ((<>))
 import GF.Grammar.CanonicalJSON
+import Data.Maybe (fromMaybe)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -245,8 +246,8 @@ handle = mconcat
       let doc = msg ^. J.params . J.textDocument . J.uri
           fileName = J.uriToFilePath doc
       liftIO $ debugM "reactor.handle" $ "Processing DidSaveTextDocument  for: " ++ show fileName
-      -- sendDiagnostics "Example message" (J.toNormalizedUri doc) Nothing
       callGF doc fileName
+      -- sendDiagnostics "Example message" (J.toNormalizedUri doc) Nothing
 
   , requestHandler J.STextDocumentRename $ \req responder -> do
       liftIO $ debugM "reactor.handle" "Processing a textDocument/rename request"
@@ -262,7 +263,7 @@ handle = mconcat
       responder (Right rsp)
 
   , requestHandler J.STextDocumentHover $ \req responder -> do
-      liftIO $ debugM "reactor.handle" "Processing a textDocument/hover request"
+      -- liftIO $ debugM "reactor.handle" "Processing a textDocument/hover request"
       let J.HoverParams doc pos _workDone = req ^. J.params
           J.Position _l _c' = pos
           rsp = J.Hover ms (Just range)
@@ -340,10 +341,60 @@ callGF doc (Just filename) = do
   -- let flags = defaultFlags
   -- compileSourceFiles
   r <- liftIO $ GF.tryIOE $ compileSourceFiles opts [filename]
-  case r of
-    (GF.Ok unit) -> pure ()
-    (GF.Bad msg) -> sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 0)
+  liftIO $ debugM "reactor.handle" "Ran GF"
+
+  mkDiagnostics doc r
+  -- case r of
+  --   (GF.Ok unit) -> pure ()
+  --   (GF.Bad msg) -> do
+  --     liftIO $ warningM "reactor.handle" $ "Got error " ++ msg
+  --     -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
+  --     -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
+  --     sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
+
+mkDiagnostics :: J.Uri -> GF.Err () -> LspT Config IO ()
+mkDiagnostics doc (GF.Ok ()) = do
+  flushDiagnosticsBySource 100 $ Just "gf-parser"
+  pure ()
+mkDiagnostics doc (GF.Bad msg) = do
+  liftIO $ warningM "reactor.handle" $ "Got error " ++ msg
+  -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
+  -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
+  sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
+  let
+    range = fromMaybe defRange $ parseErrorMessage msg
+    diags = [J.Diagnostic
+              range
+              (Just J.DsError)  -- severity
+              Nothing  -- code
+              (Just "gf-parser") -- source
+              (T.pack msg)
+              Nothing -- tags
+              (Just (J.List []))
+            ]
+  publishDiagnostics 100 (J.toNormalizedUri doc) Nothing (partitionBySource diags)
+
+defRange :: J.Range
+defRange = J.Range (J.Position 0 1) (J.Position 20 5)
+
+
+parseErrorMessage :: String -> Maybe J.Range
+parseErrorMessage msg
+  | (filename : line : col : _ ) <- split ':' msg
+  , [(l,"")] <- reads line
+  , [(c,"")] <- reads col = Just $ mkRange l c
+  | otherwise = Nothing
+
+mkRange :: Int -> Int -> J.Range
+mkRange l c = J.Range (J.Position l' c') (J.Position l' (c' + 1))
+  where l' = l - 1; c' = c - 1
+
+split :: Eq a => a -> [a] -> [[a]]
+split d [] = []
+split d s = x : split d (drop 1 y) where (x,y) = span (/= d) s
+
+-- mkDiagnostics
 
 -- ---------------------------------------------------------------------
 
