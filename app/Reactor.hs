@@ -340,14 +340,26 @@ callGF doc (Just filename) = do
          }
   -- let flags = defaultFlags
   -- compileSourceFiles
-  r <- liftIO $ GF.tryIOE $ S.batchCompile opts [filename]
+  cEnv <- getCompileEnv
+  r <- liftIO $ GF.tryIOE $ compileModule opts cEnv filename
   liftIO $ debugM "reactor.handle" "Ran GF"
 
   mkDiagnostics doc r
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
 
-mkDiagnostics :: J.Uri -> GF.Err (UTCTime, (GF.ModuleName, GF.Grammar)) -> LspT LspContext IO ()
+getCompileEnv :: LspM LspContext CompileEnv
+getCompileEnv = liftIO . readTVarIO . compileEnv =<< getConfig
+
+setCompileEnv :: CompileEnv -> LspM LspContext ()
+setCompileEnv newEnv = do
+  envV <- compileEnv <$> getConfig
+  liftIO $ atomically $ do
+    -- TODO: Check that it matches the expected old value
+    writeTVar envV newEnv
+
+mkDiagnostics :: J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
 mkDiagnostics doc (GF.Ok x) = do
+  setCompileEnv x
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
 mkDiagnostics doc (GF.Bad msg) = do
