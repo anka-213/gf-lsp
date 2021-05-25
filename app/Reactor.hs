@@ -45,7 +45,7 @@ import           Control.Concurrent
 import           System.Directory (createDirectoryIfMissing, copyFile)
 
 import qualified GF
--- import qualified GF.Infra.Option as GF
+import qualified GF.Infra.Option as GF
 
 import System.Environment (withArgs)
 import System.IO (hPutStrLn, stderr)
@@ -320,15 +320,16 @@ callGF (Just filename) = do
   createDirectoryIfMissing False outputDir
   -- optOutputDir
   -- optGFODir
+  let defaultFlags = GF.flag id GF.noOptions
+  let opts = GF.modifyFlags $ \flags -> flags
+        { GF.optOutputDir = Just outputDir
+        , GF.optGFODir = Just outputDir
+        , GF.optMode = GF.ModeCompiler
+        -- , GF.optStopAfterPhase = Linker -- Default Compile
+         }
   -- let flags = defaultFlags
-  withArgs
-    [ "-make",
-      "--output-dir=" ++ outputDir,
-      "--gfo-dir=" ++ outputDir,
-      -- "-v=0",
-      filename
-    ]
-    GF.main
+  -- compileSourceFiles
+  GF.mainOpts opts [filename]
   hPutStrLn stderr $ "Done with gf for " ++ filename
 
 -- ---------------------------------------------------------------------
