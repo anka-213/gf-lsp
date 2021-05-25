@@ -1,4 +1,16 @@
 {
+    "gf-core": {
+        "branch": "master",
+        "description": "Grammatical Framework core: compiler, shell & runtimes",
+        "homepage": "https://www.grammaticalframework.org/",
+        "owner": "GrammaticalFramework",
+        "repo": "gf-core",
+        "rev": "eeda03e9b065ee74905b6d593aa88912c78ef8bb",
+        "sha256": "1g4b4rc8afpccdcvnls0qcd32621r3xgkw7idrp3ai7k29i7zlzz",
+        "type": "tarball",
+        "url": "https://github.com/GrammaticalFramework/gf-core/archive/eeda03e9b065ee74905b6d593aa88912c78ef8bb.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
     "nixpkgs": {
         "branch": "nixpkgs-unstable",
         "description": "Nix Packages collection",

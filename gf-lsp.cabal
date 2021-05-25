@@ -35,6 +35,7 @@ executable gf-lsp
                     , stm
                     , text
                     , unordered-containers
+                    , gf
 
 test-suite gf-lsp-tests
   type:             exitcode-stdio-1.0

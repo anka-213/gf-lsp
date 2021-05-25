@@ -11,6 +11,19 @@ let
         hself.callCabal2nix
           "gf-lsp"
           (gitignore ./.) { };
+      gf = pkgs.haskell.lib.overrideCabal (hself.callCabal2nix "gf" sources.gf-core { }) (
+        _old: {
+          # Fix utf8 encoding problems
+          patches = [
+            (
+              pkgs.fetchpatch {
+                url = "https://github.com/anka-213/gf-core/commit/6f1ca05fddbcbc860898ddf10a557b513dfafc18.patch";
+                sha256 = "17vn3hncxm1dwbgpfmrl6gk6wljz3r28j191lpv5zx741pmzgbnm";
+              }
+            )
+          ];
+        }
+      );
     };
   };
 
