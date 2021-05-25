@@ -1,8 +1,7 @@
 { compiler ? "ghc8104" }:
-
 let
   sources = import ./nix/sources.nix;
-  pkgs = import sources.nixpkgs {};
+  pkgs = import sources.nixpkgs { };
 
   gitignore = pkgs.nix-gitignore.gitignoreSourcePure [ ./.gitignore ];
 
@@ -11,8 +10,7 @@ let
       "gf-lsp" =
         hself.callCabal2nix
           "gf-lsp"
-          (gitignore ./.)
-          {};
+          (gitignore ./.) { };
     };
   };
 
