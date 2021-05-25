@@ -334,6 +334,7 @@ callGF doc (Just filename) = do
         { GF.optOutputDir = Just outputDir
         , GF.optGFODir = Just outputDir
         , GF.optMode = GF.ModeCompiler
+        , GF.optVerbosity = GF.Quiet
         -- , GF.optStopAfterPhase = Linker -- Default Compile
          }
   -- let flags = defaultFlags
