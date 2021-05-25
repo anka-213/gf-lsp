@@ -10,7 +10,8 @@ let
       "gf-lsp" =
         hself.callCabal2nix
           "gf-lsp"
-          (gitignore ./.) { };
+          (gitignore ./.)
+          { };
       gf = pkgs.haskell.lib.overrideCabal (hself.callCabal2nix "gf" sources.gf-core { }) (
         _old: {
           # Fix utf8 encoding problems
@@ -21,6 +22,7 @@ let
                 sha256 = "17vn3hncxm1dwbgpfmrl6gk6wljz3r28j191lpv5zx741pmzgbnm";
               }
             )
+            ./nix/expose-all.patch
           ];
         }
       );
