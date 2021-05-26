@@ -51,12 +51,13 @@ import qualified GF.Infra.Option as GF
 import GFExtras
 
 import System.Environment (withArgs)
-import System.IO (hPutStrLn, stderr)
+import System.IO (hPutStrLn, stderr, Handle, stdout)
 import qualified GF.Support as GF
 import qualified GF.Compile as S
 import GF.Compiler (linkGrammars)
 import Data.Maybe (fromMaybe)
 import Data.Time (UTCTime)
+import GHC.IO.Handle
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -161,6 +162,7 @@ reactor inp = do
   debugM "reactor" "Started the reactor"
   forever $ do
     input <- atomically $ readTChan inp
+    -- debugM "reactor" "Got request"
     case input of
       ReactorAction act -> act
       Diagnostics -> do
@@ -172,6 +174,7 @@ reactor inp = do
             "Foo.gf"
           ]
           GF.main
+    -- debugM "reactor" "Completed request"
 
 -- | Check if we have a handler, and if we create a haskell-lsp handler to pass it as
 -- input into the reactor
@@ -336,12 +339,13 @@ callGF doc (Just filename) = do
         , GF.optGFODir = Just outputDir
         , GF.optMode = GF.ModeCompiler
         , GF.optPMCFG = False
+        , GF.optVerbosity = GF.Verbose
         -- , GF.optStopAfterPhase = Linker -- Default Compile
          }
   -- let flags = defaultFlags
   -- compileSourceFiles
   cEnv <- getCompileEnv
-  r <- liftIO $ GF.tryIOE $ compileModule opts cEnv filename
+  r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
   liftIO $ debugM "reactor.handle" "Ran GF"
 
   mkDiagnostics doc r
@@ -359,14 +363,14 @@ setCompileEnv newEnv = do
 
 mkDiagnostics :: J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
 mkDiagnostics doc (GF.Ok x) = do
-  setCompileEnv x
+  -- setCompileEnv x
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
 mkDiagnostics doc (GF.Bad msg) = do
   liftIO $ warningM "reactor.handle" $ "Got error " ++ msg
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
-  sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
+  -- sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
   let
     range = fromMaybe defRange $ parseErrorMessage msg
     diags = [J.Diagnostic
@@ -406,3 +410,19 @@ split d [] = []
 split d s = x : split d (drop 1 y) where (x,y) = span (/= d) s
 
 -- ---------------------------------------------------------------------
+
+stdoutToStdErr :: IO a -> IO a
+stdoutToStdErr act = goBracket act stderr stdout
+
+goBracket :: IO a -> Handle -> Handle -> IO a
+goBracket go tmpHandle h = do
+  buffering <- hGetBuffering h
+  let redirect = do
+        old <- hDuplicate h
+        hDuplicateTo tmpHandle h
+        return old
+      restore old = do
+        hDuplicateTo old h
+        hSetBuffering h buffering
+        hClose old
+  E.bracket redirect restore (\_ -> go)
