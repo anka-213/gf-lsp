@@ -10,6 +10,13 @@ Currently, it only provides error messages for the currently opened file and it 
 
 This currently requires a patched version of Grammatical Framework, so the easiest way to build it is using [nix](https://nixos.org/). I'll add support for other build workflows later.
 
+To speed up the installation, you can use my binary cache on [cachix](https://app.cachix.org/cache/anka-213)
+```
+bash <(curl -L https://nixos.org/nix/install)           # Install nix
+nix-env -iA cachix -f https://cachix.org/api/v1/install # Install
+cachix use anka-213                                     # Use my binary cache
+```
+
 There are a couple of ways to build it:
 ```
 nix-shell
