@@ -58,6 +58,7 @@ import GF.Compiler (linkGrammars)
 import Data.Maybe (fromMaybe)
 import Data.Time (UTCTime)
 import GHC.IO.Handle
+import Data.List.Split
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -389,17 +390,18 @@ defRange = J.Range (J.Position 0 1) (J.Position 20 5)
 
 
 parseErrorMessage :: String -> Maybe J.Range
-parseErrorMessage msg
-  | (filename : line : col : _ ) <- split ':' msg
-  , [(l,"")] <- reads line
-  , [(c,"")] <- reads col = Just $ mkRange l c l (c+1)
-  | (filename : line : _ ) <- split ':' msg
-  , [(l,"")] <- reads line = Just $ mkRange l 1 (l+1) 1
-  | (filename : line : _ ) <- split ':' msg
-  , [line1,line2] <- split '-' line
-  , [(l1,"")] <- reads line1
-  , [(l2,"")] <- reads line2 = Just $ mkRange l1 1 (l2+1) 1
-  | otherwise = Nothing
+parseErrorMessage msg = case lines msg of
+  (line1:rest) -> case splitOn ":" line1 of
+    [filename,""] -> parseErrorMessage $ unlines rest
+    [filename , line , col , "" ]
+      | [(l,"")] <- reads line
+      , [(c,"")] <- reads col -> Just $ mkRange l c l (c+1)
+    [filename , line , _ ]
+      | [(l,"")] <- reads line -> Just $ mkRange l 1 (l+1) 1
+      | [lineS,lineE] <- splitOn "-" line
+      , [(l1,"")] <- reads lineS
+      , [(l2,"")] <- reads lineE -> Just $ mkRange l1 1 (l2+1) 1
+    _ -> Nothing
 
 mkRange :: Int -> Int -> Int -> Int -> J.Range
 mkRange l1 c1 l2 c2 = J.Range (J.Position l1' c1') (J.Position l2' c2')
@@ -409,9 +411,9 @@ mkRange l1 c1 l2 c2 = J.Range (J.Position l1' c1') (J.Position l2' c2')
     l2' = l2 - 1
     c2' = c2 - 1
 
-split :: Eq a => a -> [a] -> [[a]]
-split d [] = []
-split d s = x : split d (drop 1 y) where (x,y) = span (/= d) s
+-- split :: Eq a => a -> [a] -> [[a]]
+-- split d [] = []
+-- split d s = x : split d (drop 1 y) where (x,y) = span (/= d) s
 
 -- ---------------------------------------------------------------------
 
