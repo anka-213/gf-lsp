@@ -368,26 +368,30 @@ mkDiagnostics doc (GF.Ok x) = do
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
 mkDiagnostics doc (GF.Bad msg) = do
-  liftIO $ warningM "reactor.handle" $ "Got error " ++ msg
+  liftIO $ warningM "reactor.handle" $ "Got error:\n" ++ msg
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
   -- sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
   let
-    range = fromMaybe defRange $ parseErrorMessage msg
-    diags = [J.Diagnostic
-              range
+    msgs = splitErrors msg
+    range = fromMaybe defRange . parseErrorMessage
+    diags = zipWith diagFor (map range msgs) msgs
+    diagFor rng msg = J.Diagnostic
+              rng
               (Just J.DsError)  -- severity
               Nothing  -- code
               (Just "gf-parser") -- source
               (T.pack msg)
               Nothing -- tags
               (Just (J.List []))
-            ]
+
   publishDiagnostics 100 (J.toNormalizedUri doc) Nothing (partitionBySource diags)
 
 defRange :: J.Range
 defRange = J.Range (J.Position 0 1) (J.Position 20 5)
 
+splitErrors :: String -> [String]
+splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> head x /= ' ') . lines
 
 parseErrorMessage :: String -> Maybe J.Range
 parseErrorMessage msg = case lines msg of
