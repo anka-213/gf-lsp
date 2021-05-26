@@ -43,7 +43,7 @@ import           System.Exit
 import System.Log.Logger
     ( errorM, debugM, removeAllHandlers, Priority(DEBUG), warningM )
 import           Control.Concurrent
-import           System.Directory (createDirectoryIfMissing, copyFile)
+import           System.Directory (createDirectoryIfMissing, copyFile, canonicalizePath)
 
 import qualified GF
 import qualified GF.Infra.Option as GF
@@ -351,7 +351,7 @@ callGF doc (Just filename) = do
   r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
   liftIO $ debugM "reactor.handle" "Ran GF"
 
-  mkDiagnostics doc r
+  mkDiagnostics opts doc r
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
 
 getCompileEnv :: LspM LspContext CompileEnv
@@ -364,12 +364,12 @@ setCompileEnv newEnv = do
     -- TODO: Check that it matches the expected old value
     writeTVar envV newEnv
 
-mkDiagnostics :: J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
-mkDiagnostics doc (GF.Ok x) = do
+mkDiagnostics :: GF.Options -> J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
+mkDiagnostics _ doc (GF.Ok x) = do
   -- setCompileEnv x
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
-mkDiagnostics doc (GF.Bad msg) = do
+mkDiagnostics opts doc (GF.Bad msg) = do
   liftIO $ warningM "reactor.handle" $ "Got error:\n" ++ msg
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
@@ -380,11 +380,10 @@ mkDiagnostics doc (GF.Bad msg) = do
   let
     nuri = J.toNormalizedUri doc
     msgs = splitErrors msg
-    range = maybe (nuri, defRange) (first toNuri) . parseErrorMessage
-    ranges = map range msgs
-    nuris = map fst ranges
+    range = maybe (Nothing, defRange) (first Just) . parseErrorMessage
+    (relFiles, ranges) = unzip $ map range msgs
     diags = zipWith diagFor ranges msgs
-    diagFor (fl, rng) msg = J.Diagnostic
+    diagFor rng msg = J.Diagnostic
               rng
               (Just J.DsError)  -- severity
               Nothing  -- code
@@ -392,12 +391,20 @@ mkDiagnostics doc (GF.Bad msg) = do
               (T.pack msg)
               Nothing -- tags
               (Just (J.List []))
+  absFiles <- liftIO $ mapM (mapM canonicalizePath) relFiles
+  -- absFiles <- liftIO $ mapM (getRealFile opts) relFiles
+  liftIO $ hPrint stderr relFiles
+  liftIO $ hPrint stderr absFiles
 
+  let
+    nuris = map (maybe nuri toNuri) absFiles
     nuri' :: J.NormalizedUri
     nuri' = fromMaybe nuri (allEqual nuris) -- TODO: Do something better when they are not all equal
+    -- fps = fromMaybe (error "BUG: fromMaybe") <$> map (J.uriToFilePath . J.fromNormalizedUri) nuris
 
-  liftIO $ mapM_ (hPrint stderr . fst) ranges
-  publishDiagnostics 100 nuri Nothing (partitionBySource diags)
+  liftIO $ hPrint stderr nuris
+
+  publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
 
 allEqual :: Eq a => [a] -> Maybe a
 allEqual (x:xs) | all (==x) xs = Just x

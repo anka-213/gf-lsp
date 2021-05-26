@@ -100,3 +100,25 @@ extendCompileEnv (gr,menv) (mfile,mo) =
                      return $ Map.insert mod (t,imps) menv
                 _ -> return menv
      return (prependModule gr mo,menv2)
+
+
+-- ---------------------------
+
+-- From Compile.hs
+
+getRealFile opts1 file = do
+      exists <- doesFileExist file
+      if exists
+        then return file
+        else if isRelative file
+               then do
+                       lib_dirs <- getLibraryDirectory opts1
+                       let candidates = [ lib_dir </> file | lib_dir <- lib_dirs ]
+                       putIfVerb opts1 (render ("looking for: " $$ nest 2 candidates))
+                       file1s <- filterM doesFileExist candidates
+                       case length file1s of
+                         0 -> raise (render ("Unable to find: " $$ nest 2 candidates))
+                         1 -> do return $ head file1s
+                         _ -> do putIfVerb opts1 ("matched multiple candidates: " +++ show file1s)
+                                 return $ head file1s
+               else raise (render ("File" <+> file <+> "does not exist"))
