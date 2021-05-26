@@ -51,7 +51,7 @@ import qualified GF.Infra.Option as GF
 import GFExtras
 
 import System.Environment (withArgs)
-import System.IO (hPutStrLn, stderr, Handle, stdout)
+import System.IO (hPutStrLn, stderr, Handle, stdout, hPrint)
 import qualified GF.Support as GF
 import qualified GF.Compile as S
 import GF.Compiler (linkGrammars)
@@ -59,6 +59,7 @@ import Data.Maybe (fromMaybe)
 import Data.Time (UTCTime)
 import GHC.IO.Handle
 import Data.List.Split
+import Text.ParserCombinators.ReadP
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -372,6 +373,9 @@ mkDiagnostics doc (GF.Bad msg) = do
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
   -- sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
+  -- liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForest msg
+  liftIO $ hPrint stderr msg
+  liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForest msg
   let
     msgs = splitErrors msg
     range = fromMaybe defRange . parseErrorMessage
@@ -400,7 +404,7 @@ parseErrorMessage msg = case lines msg of
     [filename , line , col , "" ]
       | [(l,"")] <- reads line
       , [(c,"")] <- reads col -> Just $ mkRange l c l (c+1)
-    [filename , line , _ ]
+    [filename , line , "" ]
       | [(l,"")] <- reads line -> Just $ mkRange l 1 (l+1) 1
       | [lineS,lineE] <- splitOn "-" line
       , [(l1,"")] <- reads lineS
@@ -414,6 +418,58 @@ mkRange l1 c1 l2 c2 = J.Range (J.Position l1' c1') (J.Position l2' c2')
     c1' = c1 - 1
     l2' = l2 - 1
     c2' = c2 - 1
+
+-- ---------------------------------------------------------------------
+
+getIndent :: ReadP Int
+-- getIndent = length <$> munch (==' ')
+getIndent = length . takeWhile (==' ') <$> look
+
+-- indented :: Int -> ReadP a -> ReadP [a]
+-- indented minIndent nested = do
+--   m <- getIndent
+--   -- if n == m
+--   _
+
+data Tree a = Node a [Tree a]
+  deriving Show
+
+treeToList :: Tree a -> [a]
+treeToList (Node a xs) = a : (treeToList =<< xs)
+
+parseTree :: ReadP (Tree (Int,String))
+parseTree = node 0 ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
+
+parseForest :: ReadP [Tree (Int,String)]
+-- parseForest = many $ anyIndent ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n')) <* eof
+-- parseForest = handleChildren (-1) ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
+parseForest = many parseTree <* eof
+
+anyIndent :: ReadP a -> ReadP (Tree a)
+anyIndent x = do
+  m <- getIndent
+  node m x
+
+node :: Int -> ReadP a -> ReadP (Tree a)
+node expectedIndent item = do
+  m <- getIndent
+  guard $ m == expectedIndent
+  x <- item
+  void (char '\n') <++ eof
+  c <- handleChildren m item <++ pure []
+  pure $ Node x c
+
+handleChildren :: Int -> ReadP a -> ReadP [Tree a]
+handleChildren parentLevel item = do
+  newIndent <- getIndent
+  guard $ newIndent > parentLevel
+  many (node newIndent item)
+  -- if newIndent > parentLevel
+  --   then many (node newIndent item)
+  --   else pure []
+
+testCase :: String
+testCase = "src/swedish/MorphoSwe.gf:31-40:\n  Happened in the renaming of ptPretForms\n   constant not found: funnenx\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\nsrc/swedish/MorphoSwe.gf:20-29:\n  Happened in the renaming of ptPretAll\n   constant not found: kox\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe"
 
 -- split :: Eq a => a -> [a] -> [[a]]
 -- split d [] = []
@@ -435,4 +491,4 @@ goBracket go tmpHandle h = do
         hDuplicateTo old h
         hSetBuffering h buffering
         hClose old
-  E.bracket redirect restore (\_ -> go)
+  E.bracket redirect restore (const go)
