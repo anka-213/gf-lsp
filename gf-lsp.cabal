@@ -29,18 +29,19 @@ executable gf-lsp
   build-depends:      base
                     -- , gf-lsp
                     , aeson
+                    , containers
                     , directory
+                    , filepath
+                    , gf
                     , hslogger
                     , lens
                     , lsp
                     , lsp-types
+                    , split
                     , stm
                     , text
                     , time
                     , unordered-containers
-                    , containers
-                    , filepath
-                    , gf
 
 test-suite gf-lsp-tests
   type:             exitcode-stdio-1.0
