@@ -395,6 +395,10 @@ parseErrorMessage msg
   , [(c,"")] <- reads col = Just $ mkRange l c l (c+1)
   | (filename : line : _ ) <- split ':' msg
   , [(l,"")] <- reads line = Just $ mkRange l 1 (l+1) 1
+  | (filename : line : _ ) <- split ':' msg
+  , [line1,line2] <- split '-' line
+  , [(l1,"")] <- reads line1
+  , [(l2,"")] <- reads line2 = Just $ mkRange l1 1 (l2+1) 1
   | otherwise = Nothing
 
 mkRange :: Int -> Int -> Int -> Int -> J.Range
