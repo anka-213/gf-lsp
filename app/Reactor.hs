@@ -60,6 +60,7 @@ import Data.Time (UTCTime)
 import GHC.IO.Handle
 import Data.List.Split
 import Text.ParserCombinators.ReadP
+import Control.Arrow (first)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -377,10 +378,13 @@ mkDiagnostics doc (GF.Bad msg) = do
   liftIO $ hPrint stderr msg
   liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForest msg
   let
+    nuri = J.toNormalizedUri doc
     msgs = splitErrors msg
-    range = fromMaybe defRange . parseErrorMessage
-    diags = zipWith diagFor (map range msgs) msgs
-    diagFor rng msg = J.Diagnostic
+    range = maybe (nuri, defRange) (first toNuri) . parseErrorMessage
+    ranges = map range msgs
+    nuris = map fst ranges
+    diags = zipWith diagFor ranges msgs
+    diagFor (fl, rng) msg = J.Diagnostic
               rng
               (Just J.DsError)  -- severity
               Nothing  -- code
@@ -389,7 +393,18 @@ mkDiagnostics doc (GF.Bad msg) = do
               Nothing -- tags
               (Just (J.List []))
 
-  publishDiagnostics 100 (J.toNormalizedUri doc) Nothing (partitionBySource diags)
+    nuri' :: J.NormalizedUri
+    nuri' = fromMaybe nuri (allEqual nuris) -- TODO: Do something better when they are not all equal
+
+  liftIO $ mapM_ (hPrint stderr . fst) ranges
+  publishDiagnostics 100 nuri Nothing (partitionBySource diags)
+
+allEqual :: Eq a => [a] -> Maybe a
+allEqual (x:xs) | all (==x) xs = Just x
+allEqual _ = Nothing
+
+toNuri :: FilePath -> J.NormalizedUri
+toNuri = J.normalizedFilePathToUri . J.toNormalizedFilePath
 
 defRange :: J.Range
 defRange = J.Range (J.Position 0 1) (J.Position 20 5)
@@ -397,18 +412,18 @@ defRange = J.Range (J.Position 0 1) (J.Position 20 5)
 splitErrors :: String -> [String]
 splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> head x /= ' ') . lines
 
-parseErrorMessage :: String -> Maybe J.Range
+parseErrorMessage :: String -> Maybe (FilePath, J.Range)
 parseErrorMessage msg = case lines msg of
   (line1:rest) -> case splitOn ":" line1 of
     [filename,""] -> parseErrorMessage $ unlines rest
     [filename , line , col , "" ]
       | [(l,"")] <- reads line
-      , [(c,"")] <- reads col -> Just $ mkRange l c l (c+1)
+      , [(c,"")] <- reads col               -> Just (filename, mkRange l c l (c+1))
     [filename , line , "" ]
-      | [(l,"")] <- reads line -> Just $ mkRange l 1 (l+1) 1
+      | [(l,"")] <- reads line              -> Just (filename, mkRange l 1 (l+1) 1)
       | [lineS,lineE] <- splitOn "-" line
       , [(l1,"")] <- reads lineS
-      , [(l2,"")] <- reads lineE -> Just $ mkRange l1 1 (l2+1) 1
+      , [(l2,"")] <- reads lineE            -> Just (filename, mkRange l1 1 (l2+1) 1)
     _ -> Nothing
 
 mkRange :: Int -> Int -> Int -> Int -> J.Range
