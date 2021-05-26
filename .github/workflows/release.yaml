@@ -1,0 +1,35 @@
+name: Build and release
+on: push
+jobs:
+  # minimal:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: nixbuild/nix-quick-install-action@v5
+  #     - run: nix-build --version
+
+
+  flakes-simple:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: nixbuild/nix-quick-install-action@v5
+      - uses: cachix/cachix-action@v10
+        with:
+          name: anka-213
+          # # If you chose signing key for write access
+          # signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+          # If you chose API tokens for write access OR if you have a private cache
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      # - uses: haskell/actions/setup@v1
+      #   with:
+      #     ghc-version: '8.8.4' # Exact version of ghc to use
+      #     # cabal-version: 'latest'. Omitted, but defaults to 'latest'
+      #     enable-stack: true
+      #     stack-version: '2.7.1'
+      - name: nix-build
+        run: nix build -L -f . exe
