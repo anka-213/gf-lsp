@@ -32,6 +32,8 @@ jobs:
       #     # cabal-version: 'latest'. Omitted, but defaults to 'latest'
       #     enable-stack: true
       #     stack-version: '2.7.1'
+      - name: nix-build --dry-run
+        run: nix build -L -f . exe --dry-run
       - name: nix-build
         run: nix build -L -f . exe
       - uses: actions/upload-artifact@v2
