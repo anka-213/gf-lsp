@@ -422,7 +422,7 @@ splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x ->
 parseErrorMessage :: String -> Maybe (FilePath, J.Range)
 parseErrorMessage msg = case lines msg of
   (line1:rest) -> case splitOn ":" line1 of
-    [filename,""] -> parseErrorMessage $ unlines rest
+    [filename,""] -> parseErrorMessage $ unlines $ map (unwords.words) rest
     [filename , line , col , "" ]
       | [(l,"")] <- reads line
       , [(c,"")] <- reads col               -> Just (filename, mkRange l c l (c+1))
@@ -492,6 +492,9 @@ handleChildren parentLevel item = do
 
 testCase :: String
 testCase = "src/swedish/MorphoSwe.gf:31-40:\n  Happened in the renaming of ptPretForms\n   constant not found: funnenx\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\nsrc/swedish/MorphoSwe.gf:20-29:\n  Happened in the renaming of ptPretAll\n   constant not found: kox\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe"
+
+testCase2 :: String
+testCase2 = "grammars/QuestionsEng.gf:\n   grammars/QuestionsEng.gf:35:\n     Happened in linearization of MkPred1\n      unknown label cxn in\n        {atype : AType;\n         cn : {s : Number => Case => Str; g : Gender; lock_CN : {}};\n         n2 : {s : Number => Case => Str; c2 : Str; g : Gender;\n               lock_N2 : {}};\n         v : {s : Order => Agr => {fin : Str; inf : Str}; lock_VPS : {}};\n         v2 : {s : Order => Agr => {fin : Str; inf : Str}; c2 : Str;\n               lock_VPS2 : {}}}"
 
 -- split :: Eq a => a -> [a] -> [[a]]
 -- split d [] = []
