@@ -15,16 +15,32 @@ import System.FilePath
 
 -- ---------------------------
 
+data Tag
+    = LocalTag
+       { identifier :: String
+       , kind :: String
+       , location :: String
+       , typeOf :: String
+       }
+    | ImportedTag
+       { identifier :: String
+       , moduleName :: String
+       , moduleAlias :: String
+       , tagFileName :: String
+       }
+    deriving (Show, Eq, Ord)
+
 -- From GF.Compile.Tags
 
 writeTags opts gr file mo = do
   let imports = getImports opts gr mo
       locals  = getLocalTags [] mo
-      txt     = unlines ((Set.toList . Set.fromList) (imports++locals))
+      txt     = unlines $ map show ((Set.toList . Set.fromList) (imports++locals))
   putPointE Normal opts ("  write file" +++ file) $ liftIO $ writeFile file txt
 
+getLocalTags :: [Tag] -> (a, ModuleInfo) -> [Tag]
 getLocalTags x (m,mi) =
-  [showIdent i ++ "\t" ++ k ++ "\t" ++ l ++ "\t" ++ t
+  [LocalTag (showIdent i) k l t
        | (i,jment) <- Map.toList (jments mi),
          (k,l,t)   <- getLocations jment] ++ x
   where
@@ -58,6 +74,7 @@ getLocalTags x (m,mi) =
     render = renderStyle style{mode=OneLineMode}
 
 
+getImports :: Options -> Grammar -> (a, ModuleInfo) -> [Tag]
 getImports opts gr mo@(m,mi) = concatMap toDep allOpens
   where
     allOpens = [(OSimple m,incl) | (m,incl) <- mextend mi] ++
@@ -65,16 +82,16 @@ getImports opts gr mo@(m,mi) = concatMap toDep allOpens
 
     toDep (OSimple m,incl)     =
       let Ok mi = lookupModule gr m
-      in [showIdent id ++ "\t" ++ "indir" ++ "\t" ++ render m ++ "\t\t" ++ gf2gftags opts (orig mi info)
+      in [ImportedTag (showIdent id) (render m) "" $ gf2gftags opts (orig mi info)
             | (id,info) <- Map.toList (jments mi), filter incl id]
     toDep (OQualif m1 m2,incl) =
       let Ok mi = lookupModule gr m2
-      in [showIdent id ++ "\t" ++ "indir" ++ "\t" ++ render m2 ++ "\t" ++ render m1 ++ "\t" ++ gf2gftags opts (orig mi info)
+      in [ImportedTag (showIdent id) (render m2) (render m1) $ gf2gftags opts (orig mi info)
             | (id,info) <- Map.toList (jments mi), filter incl id]
 
     filter MIAll          id = True
-    filter (MIOnly   ids) id = elem id ids
-    filter (MIExcept ids) id = not (elem id ids)
+    filter (MIOnly   ids) id = id `elem` ids
+    filter (MIExcept ids) id = id `notElem` ids
 
     orig mi info =
       case info of
