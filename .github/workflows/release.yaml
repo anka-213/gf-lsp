@@ -55,7 +55,9 @@ jobs:
           name: Experiment
           body: |
             Try downloading the server for your OS and see if it works
-          files: gf-lsp*
+          files: |
+            gf-lsp-macos-latest
+            gf-lsp-ubuntu-latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: my_gh_org/my_gh_repo
+          # GITHUB_REPOSITORY: ${{ GITHUB_REPOSITORY }}
