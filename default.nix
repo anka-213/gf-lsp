@@ -1,7 +1,7 @@
-{ compiler ? "ghc8104" }:
+{ system ? builtins.currentSystem, compiler ? "ghc8104" }:
 let
   sources = import ./nix/sources.nix;
-  pkgs = import sources.nixpkgs { };
+  pkgs = import sources.nixpkgs { inherit system; };
 
   gitignore = pkgs.nix-gitignore.gitignoreSourcePure [ ".github\n" ./.gitignore ];
 
