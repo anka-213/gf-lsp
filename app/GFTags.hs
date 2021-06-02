@@ -15,11 +15,13 @@ import System.FilePath
 
 -- ---------------------------
 
+type FileLocation = (FilePath, Location)
+
 data Tag
     = LocalTag
        { identifier :: String
        , kind :: String
-       , location :: String
+       , location :: FileLocation
        , typeOf :: String
        }
     | ImportedTag
@@ -45,7 +47,7 @@ getLocalTags x (m,mi) =
        | (i,jment) <- Map.toList (jments mi),
          (k,l,t)   <- getLocations jment] ++ x
   where
-    getLocations :: Info -> [(String,String,String)]
+    getLocations :: Info -> [(String,FileLocation,String)]
     getLocations (AbsCat mb_ctxt)               = maybe (loc "cat")          mb_ctxt
     getLocations (AbsFun mb_type _ mb_eqs _)    = maybe (ltype "fun")        mb_type ++
                                                   maybe (list (loc "def"))   mb_eqs
@@ -63,9 +65,9 @@ getLocalTags x (m,mi) =
                                                   maybe (loc "printname")    mprn
     getLocations _                              = []
 
-    loc kind (L loc _) = [(kind,render (ppLocation (msrc mi) loc),"")]
+    loc kind (L loc _) = [(kind,(msrc mi, loc),"")]
 
-    ltype kind (L loc ty) = [(kind,render (ppLocation (msrc mi) loc),render (ppTerm Unqualified 0 ty))]
+    ltype kind (L loc ty) = [(kind,(msrc mi, loc),render (ppTerm Unqualified 0 ty))]
 
     maybe f (Just x) = f x
     maybe f Nothing  = []
