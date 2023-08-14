@@ -21,7 +21,7 @@ jobs:
       - uses: nixbuild/nix-quick-install-action@v24
         with:
           nix_version: "2.16.1"
-          nix_conf: features = nix-command
+          # nix_conf: features = nix-command
       - uses: cachix/cachix-action@v10
         with:
           name: anka-213
@@ -39,8 +39,7 @@ jobs:
       #   run: nix build -L -f . exe --dry-run
       - run: nix build --version
       - name: nix-build
-        run: nix build -L -f . exe
-        # run: nix build -L -f . exe --extra-experimental-features nix-command
+        run: nix build -L -f . exe --extra-experimental-features nix-command
       - uses: actions/upload-artifact@v2
         with:
           name: gf-lsp-${{ matrix.os }}
