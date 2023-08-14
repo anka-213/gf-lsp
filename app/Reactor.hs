@@ -340,7 +340,7 @@ handle logger = mconcat
       let params = req ^. J.params
           margs = params ^. J.arguments
 
-      debugM logger "reactor.handle" $ "The arguments are: " <> T.pack (show margs)
+      debugM logger "reactor.handle" $ "The arguments are: " ++ show margs
       responder (Right (J.Object mempty)) -- respond to the request
 
       void $ withProgress "Executing some long running command" Cancellable $ \update ->
@@ -357,6 +357,7 @@ callGF _ Nothing = do
   liftIO $ hPutStrLn stderr "No file"
 callGF doc (Just filename) = do
   -- mkdir
+  -- TODO: fix this
   -- debugM logger "reactor.handle" "Starting GF"
   liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
 
@@ -397,7 +398,10 @@ mkDiagnostics _ doc (GF.Ok x) = do
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
 mkDiagnostics opts doc (GF.Bad msg) = do
-  warningM logger "reactor.handle" $ "Got error:\n" ++ msg
+
+  -- TODO fixme
+  -- warningM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
+
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
   -- sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
@@ -529,8 +533,8 @@ testCase2 = "grammars/QuestionsEng.gf:\n   grammars/QuestionsEng.gf:35:\n     Ha
 
 -- ---------------------------------------------------------------------
 
-debugM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
-debugM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Info
+debugM ::LogAction m (WithSeverity T.Text) -> T.Text -> String -> m ()
+debugM logger tag message = logger <& (tag <> ": " <> T.pack message) `WithSeverity` Info
 
 warningM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
 warningM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Warning

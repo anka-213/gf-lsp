@@ -38,6 +38,7 @@ executable gf-lsp
                     , lens
                     , lsp
                     , lsp-types
+                    , prettyprinter
                     , split
                     , stm
                     , text
