@@ -31,7 +31,7 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import qualified Data.Aeson                            as J
-import qualified Data.HashMap.Strict                   as H
+import qualified Data.Aeson.KeyMap                     as H
 import qualified Data.Text                             as T
 import           GHC.Generics (Generic)
 import           Language.LSP.Server
@@ -101,7 +101,7 @@ run = flip E.catches handlers $ do
       }
 
   flip E.finally finalProc $ do
-    setupLogger Nothing ["reactor"] DEBUG
+    -- setupLogger Nothing ["reactor"] DEBUG
     runServer serverDefinition
 
   where
@@ -141,7 +141,7 @@ data ReactorInput
 
 -- | Analyze the file and send any diagnostics to the client in a
 -- "textDocument/publishDiagnostics" notification
-sendDiagnostics :: T.Text -> J.NormalizedUri -> Maybe Int -> LspM LspContext ()
+sendDiagnostics :: T.Text -> J.NormalizedUri -> Maybe J.Int32 -> LspM LspContext ()
 sendDiagnostics msg fileUri version = do
   let
     diags = [J.Diagnostic
@@ -262,7 +262,7 @@ handle = mconcat
           newName = params ^. J.newName
       vdoc <- getVersionedTextDoc (params ^. J.textDocument)
       -- Replace some text at the position with what the user entered
-      let edit = J.InL $ J.TextEdit (J.mkRange l c l (c + T.length newName)) newName
+      let edit = J.InL $ J.TextEdit (J.mkRange l c l (c + fromIntegral (T.length newName))) newName
           tde = J.TextDocumentEdit vdoc (J.List [edit])
           -- "documentChanges" field is preferred over "changes"
           rsp = J.WorkspaceEdit Nothing (Just (J.List [J.InL tde])) Nothing
@@ -317,10 +317,11 @@ handle = mconcat
       responder (Right (J.Object mempty)) -- respond to the request
 
       void $ withProgress "Executing some long running command" Cancellable $ \update ->
-        forM [(0 :: Double)..10] $ \i -> do
+        forM [0..10] $ \i -> do
           update (ProgressAmount (Just (i * 10)) (Just "Doing stuff"))
           liftIO $ threadDelay (1 * 1000000)
   ]
+  -- where debugM x y = pure ()
 
 outputDir :: String
 outputDir = "generated"
@@ -433,7 +434,7 @@ parseErrorMessage msg = case lines msg of
       , [(l2,"")] <- reads lineE            -> Just (filename, mkRange l1 1 (l2+1) 1)
     _ -> Nothing
 
-mkRange :: Int -> Int -> Int -> Int -> J.Range
+mkRange :: J.UInt -> J.UInt -> J.UInt -> J.UInt -> J.Range
 mkRange l1 c1 l2 c2 = J.Range (J.Position l1' c1') (J.Position l2' c2')
   where
     l1' = l1 - 1
