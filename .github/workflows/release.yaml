@@ -19,6 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: nixbuild/nix-quick-install-action@v25
+        with:
+          load_nixConfig: false
       - uses: cachix/cachix-action@v10
         with:
           name: anka-213
