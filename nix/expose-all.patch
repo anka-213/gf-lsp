@@ -7,6 +7,6 @@ index 0076e7638..8d3fe4b49 100644
      GF.Grammar.Canonical
 
 -  other-modules:
-     GF.Main GF.Compiler GF.Interactive
-
-     GF.Compile GF.CompileInParallel GF.CompileOne  GF.Compile.GetGrammar
+     GF.Main
+     GF.Compiler
+     GF.Interactive

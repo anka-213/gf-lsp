@@ -13,7 +13,13 @@ let
           (gitignore ./.)
           { };
       gf = pkgs.haskell.lib.overrideCabal
-        (hself.callCabal2nixWithOptions "gf" sources.gf-core "--flag=-server" { })
+        (
+          # pkgs.haskell.lib.disableCabalFlag
+          (hself.callCabal2nixWithOptions "gf"
+            sources.gf-core "--flag=-server"
+            { })
+          # "server"
+        )
         (
           _old: {
             # Fix utf8 encoding problems
@@ -26,7 +32,9 @@ let
               #   }
               # )
               ./nix/expose-all.patch
+              ./nix/revert-new-cabal-madness.patch
             ];
+            jailbreak = true;
           }
         );
     };
