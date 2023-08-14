@@ -192,7 +192,7 @@ reactor logger inp = do
   logger <& "Started the reactor" `WithSeverity` Info
   forever $ do
     input <- atomically $ readTChan inp
-    -- debugM "reactor" "Got request"
+    -- debugM logger "reactor" "Got request"
     case input of
       ReactorAction act -> act
       Diagnostics -> do
@@ -204,7 +204,7 @@ reactor logger inp = do
             "Foo.gf"
           ]
           GF.main
-    -- debugM "reactor" "Completed request"
+    -- debugM logger "reactor" "Completed request"
 
 -- | Check if we have a handler, and if we create a haskell-lsp handler to pass it as
 -- input into the reactor
@@ -225,7 +225,7 @@ lspHandlers logger rin = mapHandlers goReq goNot (handle logger)
 handle ::  L.LogAction (LspM LspContext) (WithSeverity T.Text) -> Handlers (LspM LspContext)
 handle logger = mconcat
   [ notificationHandler J.SInitialized $ \_msg -> do
-      debugM "reactor.handle" "Processing the Initialized notification"
+      debugM logger "reactor.handle" "Processing the Initialized notification"
 
       -- -- We're initialized! Lets send a showMessageRequest now
       -- let params = J.ShowMessageRequestParams
@@ -244,7 +244,7 @@ handle logger = mconcat
       --       let regOpts = J.CodeLensRegistrationOptions Nothing Nothing (Just False)
 
       --       void $ registerCapability J.STextDocumentCodeLens regOpts $ \_req responder -> do
-      --         debugM "reactor.handle" "Processing a textDocument/codeLens request"
+      --         debugM logger "reactor.handle" "Processing a textDocument/codeLens request"
       --         let cmd = J.Command "Say hello" "lsp-hello-command" Nothing
       --             rsp = J.List [J.CodeLens (J.mkRange 0 0 0 100) (Just cmd) Nothing]
       --         responder (Right rsp)
@@ -252,13 +252,13 @@ handle logger = mconcat
   , notificationHandler J.STextDocumentDidOpen $ \msg -> do
     let doc  = msg ^. J.params . J.textDocument . J.uri
         fileName =  J.uriToFilePath doc
-    debugM "reactor.handle" $ "Processing DidOpenTextDocument for: " ++ show fileName
+    debugM logger "reactor.handle" $ "Processing DidOpenTextDocument for: " ++ show fileName
     -- sendDiagnostics "Example message" (J.toNormalizedUri doc) (Just 0)
     callGF doc fileName
 
   , notificationHandler J.SWorkspaceDidChangeConfiguration $ \msg -> do
       cfg <- config <$> getConfig
-      debugM "configuration changed: " (show (msg,cfg))
+      debugM logger "configuration changed: " (show (msg,cfg))
       sendNotification J.SWindowShowMessage $
         J.ShowMessageParams J.MtInfo $ "Wibble factor set to " <> T.pack (show (wibbleFactor cfg))
 
@@ -267,23 +267,23 @@ handle logger = mconcat
                     . J.textDocument
                     . J.uri
                     . to J.toNormalizedUri
-    debugM "reactor.handle" $ "Processing DidChangeTextDocument for: " ++ show doc
+    debugM logger "reactor.handle" $ "Processing DidChangeTextDocument for: " ++ show doc
     mdoc <- getVirtualFile doc
     case mdoc of
       Just (VirtualFile _version str _) -> do
-        debugM "reactor.handle" $ "Found the virtual file: " ++ show str
+        debugM logger "reactor.handle" $ "Found the virtual file: " ++ show str
       Nothing -> do
-        debugM "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
+        debugM logger "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
 
   , notificationHandler J.STextDocumentDidSave $ \msg -> do
       let doc = msg ^. J.params . J.textDocument . J.uri
           fileName = J.uriToFilePath doc
-      debugM "reactor.handle" $ "Processing DidSaveTextDocument  for: " ++ show fileName
+      debugM logger "reactor.handle" $ "Processing DidSaveTextDocument  for: " ++ show fileName
       callGF doc fileName
       -- sendDiagnostics "Example message" (J.toNormalizedUri doc) Nothing
 
   , requestHandler J.STextDocumentRename $ \req responder -> do
-      debugM "reactor.handle" "Processing a textDocument/rename request"
+      debugM logger "reactor.handle" "Processing a textDocument/rename request"
       let params = req ^. J.params
           J.Position l c = params ^. J.position
           newName = params ^. J.newName
@@ -296,7 +296,7 @@ handle logger = mconcat
       responder (Right rsp)
 
   , requestHandler J.STextDocumentHover $ \req responder -> do
-      -- debugM "reactor.handle" "Processing a textDocument/hover request"
+      -- debugM logger "reactor.handle" "Processing a textDocument/hover request"
       let J.HoverParams doc pos _workDone = req ^. J.params
           J.Position _l _c' = pos
           rsp = J.Hover ms (Just range)
@@ -307,7 +307,7 @@ handle logger = mconcat
       responder (Right $ Just rsp)
 
   , requestHandler J.STextDocumentDocumentSymbol $ \req responder -> do
-      debugM "reactor.handle" "Processing a textDocument/documentSymbol request"
+      debugM logger "reactor.handle" "Processing a textDocument/documentSymbol request"
       let J.DocumentSymbolParams _ _ doc = req ^. J.params
           loc = J.Location (doc ^. J.uri) (J.Range (J.Position 0 0) (J.Position 0 0))
           sym = J.SymbolInformation "lsp-hello" J.SkFunction Nothing Nothing loc Nothing
@@ -315,7 +315,7 @@ handle logger = mconcat
       responder (Right rsp)
 
   , requestHandler J.STextDocumentCodeAction $ \req responder -> do
-      debugM "reactor.handle" "Processing a textDocument/codeAction request"
+      debugM logger "reactor.handle" "Processing a textDocument/codeAction request"
       let params = req ^. J.params
           doc = params ^. J.textDocument
           (J.List diags) = params ^. J.context . J.diagnostics
@@ -336,11 +336,11 @@ handle logger = mconcat
       responder (Right rsp)
 
   , requestHandler J.SWorkspaceExecuteCommand $ \req responder -> do
-      debugM "reactor.handle" "Processing a workspace/executeCommand request"
+      debugM logger "reactor.handle" "Processing a workspace/executeCommand request"
       let params = req ^. J.params
           margs = params ^. J.arguments
 
-      debugM "reactor.handle" $ "The arguments are: " <> T.pack (show margs)
+      debugM logger "reactor.handle" $ "The arguments are: " <> T.pack (show margs)
       responder (Right (J.Object mempty)) -- respond to the request
 
       void $ withProgress "Executing some long running command" Cancellable $ \update ->
@@ -348,7 +348,6 @@ handle logger = mconcat
           update (ProgressAmount (Just (i * 10)) (Just "Doing stuff"))
           liftIO $ threadDelay (1 * 1000000)
   ]
-  where debugM x y = logger <& (x <> ": " <> y) `WithSeverity` Info
 
 outputDir :: String
 outputDir = "generated"
@@ -358,7 +357,7 @@ callGF _ Nothing = do
   liftIO $ hPutStrLn stderr "No file"
 callGF doc (Just filename) = do
   -- mkdir
-  -- debugM "reactor.handle" "Starting GF"
+  -- debugM logger "reactor.handle" "Starting GF"
   liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
 
   liftIO $ createDirectoryIfMissing False outputDir
@@ -377,7 +376,7 @@ callGF doc (Just filename) = do
   -- compileSourceFiles
   cEnv <- getCompileEnv
   r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
-  -- debugM "reactor.handle" "Ran GF"
+  -- debugM logger "reactor.handle" "Ran GF"
 
   mkDiagnostics opts doc r
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
@@ -398,7 +397,7 @@ mkDiagnostics _ doc (GF.Ok x) = do
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
 mkDiagnostics opts doc (GF.Bad msg) = do
-  liftIO $ warningM "reactor.handle" $ "Got error:\n" ++ msg
+  warningM logger "reactor.handle" $ "Got error:\n" ++ msg
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
   -- sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
@@ -529,6 +528,12 @@ testCase2 = "grammars/QuestionsEng.gf:\n   grammars/QuestionsEng.gf:35:\n     Ha
 -- split d s = x : split d (drop 1 y) where (x,y) = span (/= d) s
 
 -- ---------------------------------------------------------------------
+
+debugM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
+debugM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Info
+
+warningM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
+warningM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Warning
 
 stdoutToStdErr :: IO a -> IO a
 stdoutToStdErr act = goBracket act stderr stdout
