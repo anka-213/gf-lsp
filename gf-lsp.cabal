@@ -33,7 +33,8 @@ executable gf-lsp
                     , directory
                     , filepath
                     , gf
-                    , hslogger
+                    -- , hslogger
+                    , co-log-core
                     , lens
                     , lsp
                     , lsp-types

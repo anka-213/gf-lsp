@@ -23,6 +23,8 @@ To try out this server, install it with
 and plug it into your client of choice.
 -}
 module Main (main) where
+import           Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
+import qualified Colog.Core as L
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
 import qualified Control.Exception                     as E
@@ -33,15 +35,19 @@ import           Control.Monad.STM
 import qualified Data.Aeson                            as J
 import qualified Data.Aeson.KeyMap                     as H
 import qualified Data.Text                             as T
+import           Prettyprinter ( Pretty(pretty) )
 import           GHC.Generics (Generic)
 import           Language.LSP.Server
 import           Language.LSP.Diagnostics
+import           Language.LSP.Logging (defaultClientLogger)
 import qualified Language.LSP.Types            as J
 import qualified Language.LSP.Types.Lens       as J
 import           Language.LSP.VFS
 import           System.Exit
-import System.Log.Logger
-    ( errorM, debugM, removeAllHandlers, Priority(DEBUG), warningM )
+import System.IO
+    ( stdin, hPutStrLn, stderr, Handle, stdout, hPrint )
+-- import System.Log.Logger
+--     ( errorM, debugM, removeAllHandlers, Priority(DEBUG), warningM )
 import           Control.Concurrent
 import           System.Directory (createDirectoryIfMissing, copyFile, canonicalizePath)
 
@@ -51,7 +57,6 @@ import qualified GF.Infra.Option as GF
 import GFExtras
 
 import System.Environment (withArgs)
-import System.IO (hPutStrLn, stderr, Handle, stdout, hPrint)
 import qualified GF.Support as GF
 import qualified GF.Compile as S
 import GF.Compiler (linkGrammars)
@@ -88,27 +93,49 @@ run = flip E.catches handlers $ do
   cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
 
   let
+        -- Three loggers:
+    -- 1. To stderr
+    -- 2. To the client (filtered by severity)
+    -- 3. To both
+    stderrLogger :: LogAction IO (WithSeverity T.Text)
+    stderrLogger = L.cmap show L.logStringStderr
+    clientLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
+    clientLogger = defaultClientLogger
+    dualLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
+    dualLogger = clientLogger <> L.hoistLogAction liftIO stderrLogger
+
     serverDefinition = ServerDefinition
       { defaultConfig = LspContext { compileEnv = cEnv, config = Config {fooTheBar = False, wibbleFactor = 0 }}
       , onConfigurationChange = \old v -> do
           case J.fromJSON v of
             J.Error e -> Left (T.pack e)
             J.Success cfg -> Right $ old {config = cfg }
-      , doInitialize = \env _ -> forkIO (reactor rin) >> pure (Right env)
-      , staticHandlers = lspHandlers rin
+      -- , doInitialize = \env _ -> forkIO (reactor rin) >> pure (Right env)
+      -- , staticHandlers = lspHandlers rin
+      , doInitialize = \env _ -> forkIO (reactor stderrLogger rin) >> pure (Right env)
+      -- Handlers log to both the client and stderr
+      , staticHandlers = lspHandlers dualLogger rin
       , interpretHandler = \env -> Iso (runLspT env) liftIO
       , options = lspOptions
       }
 
-  flip E.finally finalProc $ do
-    -- setupLogger Nothing ["reactor"] DEBUG
-    runServer serverDefinition
+  -- flip E.finally finalProc $ do
+  --   -- setupLogger Nothing ["reactor"] DEBUG
+  --   runServer serverDefinition
+  let
+    logToText = T.pack . show . pretty
+  runServerWithHandles
+      -- Log to both the client and stderr when we can, stderr beforehand
+    (L.cmap (fmap logToText) stderrLogger)
+    (L.cmap (fmap logToText) dualLogger)
+    stdin
+    stdout
+    serverDefinition
 
   where
     handlers = [ E.Handler ioExcept
                , E.Handler someExcept
                ]
-    finalProc = removeAllHandlers
     ioExcept   (e :: E.IOException)       = print e >> return 1
     someExcept (e :: E.SomeException)     = print e >> return 1
 
@@ -160,9 +187,9 @@ sendDiagnostics msg fileUri version = do
 -- | The single point that all events flow through, allowing management of state
 -- to stitch replies and requests together from the two asynchronous sides: lsp
 -- server and backend compiler
-reactor :: TChan ReactorInput -> IO ()
-reactor inp = do
-  debugM "reactor" "Started the reactor"
+reactor :: L.LogAction IO (WithSeverity T.Text) -> TChan ReactorInput -> IO ()
+reactor logger inp = do
+  logger <& "Started the reactor" `WithSeverity` Info
   forever $ do
     input <- atomically $ readTChan inp
     -- debugM "reactor" "Got request"
@@ -181,8 +208,8 @@ reactor inp = do
 
 -- | Check if we have a handler, and if we create a haskell-lsp handler to pass it as
 -- input into the reactor
-lspHandlers :: TChan ReactorInput -> Handlers (LspM LspContext)
-lspHandlers rin = mapHandlers goReq goNot handle
+lspHandlers :: L.LogAction (LspM LspContext) (WithSeverity T.Text) -> TChan ReactorInput -> Handlers (LspM LspContext)
+lspHandlers logger rin = mapHandlers goReq goNot (handle logger)
   where
     goReq :: forall (a :: J.Method J.FromClient J.Request). Handler (LspM LspContext) a -> Handler (LspM LspContext) a
     goReq f = \msg k -> do
@@ -195,10 +222,10 @@ lspHandlers rin = mapHandlers goReq goNot handle
       liftIO $ atomically $ writeTChan rin $ ReactorAction (runLspT env $ f msg)
 
 -- | Where the actual logic resides for handling requests and notifications.
-handle :: Handlers (LspM LspContext)
-handle = mconcat
+handle ::  L.LogAction (LspM LspContext) (WithSeverity T.Text) -> Handlers (LspM LspContext)
+handle logger = mconcat
   [ notificationHandler J.SInitialized $ \_msg -> do
-      liftIO $ debugM "reactor.handle" "Processing the Initialized notification"
+      debugM "reactor.handle" "Processing the Initialized notification"
 
       -- -- We're initialized! Lets send a showMessageRequest now
       -- let params = J.ShowMessageRequestParams
@@ -217,7 +244,7 @@ handle = mconcat
       --       let regOpts = J.CodeLensRegistrationOptions Nothing Nothing (Just False)
 
       --       void $ registerCapability J.STextDocumentCodeLens regOpts $ \_req responder -> do
-      --         liftIO $ debugM "reactor.handle" "Processing a textDocument/codeLens request"
+      --         debugM "reactor.handle" "Processing a textDocument/codeLens request"
       --         let cmd = J.Command "Say hello" "lsp-hello-command" Nothing
       --             rsp = J.List [J.CodeLens (J.mkRange 0 0 0 100) (Just cmd) Nothing]
       --         responder (Right rsp)
@@ -225,13 +252,13 @@ handle = mconcat
   , notificationHandler J.STextDocumentDidOpen $ \msg -> do
     let doc  = msg ^. J.params . J.textDocument . J.uri
         fileName =  J.uriToFilePath doc
-    liftIO $ debugM "reactor.handle" $ "Processing DidOpenTextDocument for: " ++ show fileName
+    debugM "reactor.handle" $ "Processing DidOpenTextDocument for: " ++ show fileName
     -- sendDiagnostics "Example message" (J.toNormalizedUri doc) (Just 0)
     callGF doc fileName
 
   , notificationHandler J.SWorkspaceDidChangeConfiguration $ \msg -> do
       cfg <- config <$> getConfig
-      liftIO $ debugM "configuration changed: " (show (msg,cfg))
+      debugM "configuration changed: " (show (msg,cfg))
       sendNotification J.SWindowShowMessage $
         J.ShowMessageParams J.MtInfo $ "Wibble factor set to " <> T.pack (show (wibbleFactor cfg))
 
@@ -240,23 +267,23 @@ handle = mconcat
                     . J.textDocument
                     . J.uri
                     . to J.toNormalizedUri
-    liftIO $ debugM "reactor.handle" $ "Processing DidChangeTextDocument for: " ++ show doc
+    debugM "reactor.handle" $ "Processing DidChangeTextDocument for: " ++ show doc
     mdoc <- getVirtualFile doc
     case mdoc of
       Just (VirtualFile _version str _) -> do
-        liftIO $ debugM "reactor.handle" $ "Found the virtual file: " ++ show str
+        debugM "reactor.handle" $ "Found the virtual file: " ++ show str
       Nothing -> do
-        liftIO $ debugM "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
+        debugM "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
 
   , notificationHandler J.STextDocumentDidSave $ \msg -> do
       let doc = msg ^. J.params . J.textDocument . J.uri
           fileName = J.uriToFilePath doc
-      liftIO $ debugM "reactor.handle" $ "Processing DidSaveTextDocument  for: " ++ show fileName
+      debugM "reactor.handle" $ "Processing DidSaveTextDocument  for: " ++ show fileName
       callGF doc fileName
       -- sendDiagnostics "Example message" (J.toNormalizedUri doc) Nothing
 
   , requestHandler J.STextDocumentRename $ \req responder -> do
-      liftIO $ debugM "reactor.handle" "Processing a textDocument/rename request"
+      debugM "reactor.handle" "Processing a textDocument/rename request"
       let params = req ^. J.params
           J.Position l c = params ^. J.position
           newName = params ^. J.newName
@@ -269,7 +296,7 @@ handle = mconcat
       responder (Right rsp)
 
   , requestHandler J.STextDocumentHover $ \req responder -> do
-      -- liftIO $ debugM "reactor.handle" "Processing a textDocument/hover request"
+      -- debugM "reactor.handle" "Processing a textDocument/hover request"
       let J.HoverParams doc pos _workDone = req ^. J.params
           J.Position _l _c' = pos
           rsp = J.Hover ms (Just range)
@@ -280,7 +307,7 @@ handle = mconcat
       responder (Right $ Just rsp)
 
   , requestHandler J.STextDocumentDocumentSymbol $ \req responder -> do
-      liftIO $ debugM "reactor.handle" "Processing a textDocument/documentSymbol request"
+      debugM "reactor.handle" "Processing a textDocument/documentSymbol request"
       let J.DocumentSymbolParams _ _ doc = req ^. J.params
           loc = J.Location (doc ^. J.uri) (J.Range (J.Position 0 0) (J.Position 0 0))
           sym = J.SymbolInformation "lsp-hello" J.SkFunction Nothing Nothing loc Nothing
@@ -288,7 +315,7 @@ handle = mconcat
       responder (Right rsp)
 
   , requestHandler J.STextDocumentCodeAction $ \req responder -> do
-      liftIO $ debugM "reactor.handle" "Processing a textDocument/codeAction request"
+      debugM "reactor.handle" "Processing a textDocument/codeAction request"
       let params = req ^. J.params
           doc = params ^. J.textDocument
           (J.List diags) = params ^. J.context . J.diagnostics
@@ -309,11 +336,11 @@ handle = mconcat
       responder (Right rsp)
 
   , requestHandler J.SWorkspaceExecuteCommand $ \req responder -> do
-      liftIO $ debugM "reactor.handle" "Processing a workspace/executeCommand request"
+      debugM "reactor.handle" "Processing a workspace/executeCommand request"
       let params = req ^. J.params
           margs = params ^. J.arguments
 
-      liftIO $ debugM "reactor.handle" $ "The arguments are: " ++ show margs
+      debugM "reactor.handle" $ "The arguments are: " <> T.pack (show margs)
       responder (Right (J.Object mempty)) -- respond to the request
 
       void $ withProgress "Executing some long running command" Cancellable $ \update ->
@@ -321,7 +348,7 @@ handle = mconcat
           update (ProgressAmount (Just (i * 10)) (Just "Doing stuff"))
           liftIO $ threadDelay (1 * 1000000)
   ]
-  -- where debugM x y = pure ()
+  where debugM x y = logger <& (x <> ": " <> y) `WithSeverity` Info
 
 outputDir :: String
 outputDir = "generated"
@@ -331,7 +358,7 @@ callGF _ Nothing = do
   liftIO $ hPutStrLn stderr "No file"
 callGF doc (Just filename) = do
   -- mkdir
-  liftIO $ debugM "reactor.handle" "Starting GF"
+  -- debugM "reactor.handle" "Starting GF"
   liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
 
   liftIO $ createDirectoryIfMissing False outputDir
@@ -350,7 +377,7 @@ callGF doc (Just filename) = do
   -- compileSourceFiles
   cEnv <- getCompileEnv
   r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
-  liftIO $ debugM "reactor.handle" "Ran GF"
+  -- debugM "reactor.handle" "Ran GF"
 
   mkDiagnostics opts doc r
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
