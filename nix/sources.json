@@ -5,10 +5,10 @@
         "homepage": "https://www.grammaticalframework.org/",
         "owner": "GrammaticalFramework",
         "repo": "gf-core",
-        "rev": "eeda03e9b065ee74905b6d593aa88912c78ef8bb",
-        "sha256": "1g4b4rc8afpccdcvnls0qcd32621r3xgkw7idrp3ai7k29i7zlzz",
+        "rev": "86af7b12b3f9f9f712ddcf19973cfb1a80042aa9",
+        "sha256": "0h73l99zwjjdfw04db5l8ix04p00c0n838z7xk3ip60pbbl41n6a",
         "type": "tarball",
-        "url": "https://github.com/GrammaticalFramework/gf-core/archive/eeda03e9b065ee74905b6d593aa88912c78ef8bb.tar.gz",
+        "url": "https://github.com/GrammaticalFramework/gf-core/archive/86af7b12b3f9f9f712ddcf19973cfb1a80042aa9.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "nixpkgs": {
@@ -17,10 +17,10 @@
         "homepage": null,
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "efee454783c5c14ae78687439077c1d3f0544d97",
-        "sha256": "1qk4g8rav2mkbd6y2zr1pi3pxs4rwlkpr8xk51m0p26khprxvjaf",
+        "rev": "750fc50bfd132a44972aa15bb21937ae26303bc4",
+        "sha256": "1v6xf8pbhckyvxxr5ljm16mz7fircfl81bzhsqf555xjvqpb3a8d",
         "type": "tarball",
-        "url": "https://github.com/nixos/nixpkgs/archive/efee454783c5c14ae78687439077c1d3f0544d97.tar.gz",
+        "url": "https://github.com/nixos/nixpkgs/archive/750fc50bfd132a44972aa15bb21937ae26303bc4.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
