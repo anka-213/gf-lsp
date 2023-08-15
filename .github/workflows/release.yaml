@@ -40,10 +40,15 @@ jobs:
       - run: nix build --version
       - name: nix-build
         run: nix build -L -f . exe --extra-experimental-features nix-command
+      - name: Make bundle
+        run: nix bundle -f . exe --extra-experimental-features nix-command -o lsp-bundle
+        if: ${{ matrix.os == 'ubuntu-latest' }}
       - uses: actions/upload-artifact@v2
         with:
           name: gf-lsp-${{ matrix.os }}
-          path: result/bin/gf-lsp
+          path: |
+            result/bin/gf-lsp
+            lsp-bundle
 
   make-release:
     runs-on: ubuntu-latest
@@ -54,6 +59,7 @@ jobs:
       - run: |
           mv gf-lsp-macos-latest/gf-lsp gf-lsp-macos
           mv gf-lsp-ubuntu-latest/gf-lsp gf-lsp-ubuntu
+          mv gf-lsp-ubuntu-latest/lsp-bundle gf-lsp-ubuntu-bundle
 
       - name: Release
         uses: softprops/action-gh-release@v0.1.15
@@ -62,12 +68,13 @@ jobs:
           prerelease: true
           tag_name: prerelease
           draft: true
-          name: Experiment
+          name: Experiment with using releases
           body: |
             Try downloading the server for your OS and see if it works
           files: |
             gf-lsp-macos
             gf-lsp-ubuntu
+            gf-lsp-ubuntu-bundle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # GITHUB_REPOSITORY: ${{ GITHUB_REPOSITORY }}
