@@ -1,0 +1,6 @@
+# Files that aren't needed by cabal to compile
+# Excluding these will reduce the amount of needless recompilation
+.gitignore
+.nixignore
+.vscode
+default.nix

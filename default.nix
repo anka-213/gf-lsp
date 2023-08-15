@@ -3,7 +3,7 @@ let
   sources = import ./nix/sources.nix;
   pkgs = import sources.nixpkgs { inherit system; };
 
-  gitignore = pkgs.nix-gitignore.gitignoreSourcePure [ ".github\n" ./.gitignore ];
+  gitignore = pkgs.nix-gitignore.gitignoreSourcePure [ ".github\n.git\n" ./.nixignore ./.gitignore ./.git/info/exclude ];
 
   myHaskellPackages = pkgs.haskell.packages.${compiler}.override {
     overrides = hself: hsuper: {
