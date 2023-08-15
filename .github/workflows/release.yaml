@@ -41,14 +41,14 @@ jobs:
       - name: nix-build
         run: nix build -L -f . exe --extra-experimental-features nix-command
       - name: Make bundle
-        run: nix bundle -f . exe --extra-experimental-features 'nix-command flakes' -o lsp-bundle
+        run: nix bundle -f . exe --extra-experimental-features 'nix-command flakes' -o result-lsp-bundle
         if: ${{ matrix.os == 'ubuntu-latest' }}
       - uses: actions/upload-artifact@v2
         with:
           name: gf-lsp-${{ matrix.os }}
           path: |
             result/bin/gf-lsp
-            lsp-bundle
+            result-lsp-bundle
 
   make-release:
     runs-on: ubuntu-latest
@@ -57,9 +57,9 @@ jobs:
       - uses: actions/download-artifact@v2
       - run: ls -lR
       - run: |
-          mv gf-lsp-macos-latest/gf-lsp gf-lsp-macos
-          mv gf-lsp-ubuntu-latest/gf-lsp gf-lsp-ubuntu
-          mv gf-lsp-ubuntu-latest/lsp-bundle gf-lsp-ubuntu-bundle
+          mv gf-lsp-macos-latest/result/bin/gf-lsp gf-lsp-macos
+          mv gf-lsp-ubuntu-latest/result/bin/gf-lsp gf-lsp-ubuntu
+          mv gf-lsp-ubuntu-latest/result-lsp-bundle gf-lsp-ubuntu-bundle
 
       - name: Release
         uses: softprops/action-gh-release@v0.1.15
