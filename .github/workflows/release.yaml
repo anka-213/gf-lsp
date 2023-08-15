@@ -41,7 +41,7 @@ jobs:
       - name: nix-build
         run: nix build -L -f . exe --extra-experimental-features nix-command
       - name: Make bundle
-        run: nix bundle -f . exe --extra-experimental-features nix-command -o lsp-bundle
+        run: nix bundle -f . exe --extra-experimental-features 'nix-command flakes' -o lsp-bundle
         if: ${{ matrix.os == 'ubuntu-latest' }}
       - uses: actions/upload-artifact@v2
         with:
