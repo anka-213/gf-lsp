@@ -271,6 +271,11 @@ handle logger = mconcat
       --             rsp = J.List [J.CodeLens (J.mkRange 0 0 0 100) (Just cmd) Nothing]
       --         responder (Right rsp)
 
+  , notificationHandler J.SCancelRequest $ \msg -> do
+      -- TODO: Actually try to cancel stuff
+      case msg ^. J.params of
+        (J.CancelParams id) -> debugM logger "reactor.handle" $ "Got cancel request for: " ++ show id
+
   , notificationHandler J.STextDocumentDidOpen $ \msg -> do
     let doc  = msg ^. J.params . J.textDocument . J.uri
         fileName =  J.uriToFilePath doc
