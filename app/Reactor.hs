@@ -91,6 +91,7 @@ run :: IO Int
 run = flip E.catches handlers $ do
 
   -- logChan  <- atomically newTChan :: IO (TChan (WithSeverity T.Text))
+  logLock <- newMVar ()
   logChan  <- newEmptyMVar :: IO (MVar (WithSeverity T.Text))
   -- logChan  <- atomically newTChan :: IO (TChan (IO ()))
   rin  <- atomically newTChan :: IO (TChan ReactorInput)
@@ -104,6 +105,16 @@ run = flip E.catches handlers $ do
     hPrint stderr msg
 
   let
+    useLock :: IO x -> IO x
+    useLock = E.bracket (takeMVar logLock) (putMVar logLock) . const
+    -- TODO: Bracket this too
+    useLock' :: MonadIO m => m x -> m x
+    useLock' f = do
+      l <- liftIO $ takeMVar logLock
+      res <- f
+      liftIO $ putMVar logLock l
+      pure res
+
     logToChan :: MonadIO m => MVar msg -> LogAction m msg
     logToChan chan = LogAction $ liftIO . putMVar chan
     -- logChan = LogAction $ liftIO . hPutStrLn stderr
@@ -112,16 +123,18 @@ run = flip E.catches handlers $ do
     -- 1. To stderr
     -- 2. To the client (filtered by severity)
     -- 3. To both
+    stderrLoggerUnlocked :: LogAction IO (WithSeverity T.Text)
+    stderrLoggerUnlocked = L.cmap show L.logStringStderr
     stderrLogger :: LogAction IO (WithSeverity T.Text)
-    -- stderrLogger = L.cmap show L.logStringStderr
+    stderrLogger = L.hoistLogAction useLock stderrLoggerUnlocked
     -- stderrLogger = logToChan logChan
-    stderrLogger = mempty
+    -- stderrLogger = mempty
     clientLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
     clientLogger = defaultClientLogger
     dualLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
-    -- dualLogger = clientLogger <> L.hoistLogAction liftIO stderrLogger
+    dualLogger = L.hoistLogAction useLock' $ clientLogger <> L.hoistLogAction liftIO stderrLogger
     -- dualLogger = L.hoistLogAction liftIO stderrLogger
-    dualLogger = clientLogger
+    -- dualLogger = clientLogger
 
     serverDefinition = ServerDefinition
       { defaultConfig = LspContext { compileEnv = cEnv, config = Config {fooTheBar = False, wibbleFactor = 0 }}
@@ -415,6 +428,7 @@ setCompileEnv newEnv = do
 mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> GF.Options -> J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
 mkDiagnostics logger _ doc (GF.Ok x) = do
   -- setCompileEnv x
+  -- debugM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
 mkDiagnostics logger opts doc (GF.Bad msg) = do
