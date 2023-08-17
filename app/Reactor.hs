@@ -254,7 +254,7 @@ handle logger = mconcat
         fileName =  J.uriToFilePath doc
     debugM logger "reactor.handle" $ "Processing DidOpenTextDocument for: " ++ show fileName
     -- sendDiagnostics "Example message" (J.toNormalizedUri doc) (Just 0)
-    callGF doc fileName
+    callGF logger doc fileName
 
   , notificationHandler J.SWorkspaceDidChangeConfiguration $ \msg -> do
       cfg <- config <$> getConfig
@@ -279,7 +279,7 @@ handle logger = mconcat
       let doc = msg ^. J.params . J.textDocument . J.uri
           fileName = J.uriToFilePath doc
       debugM logger "reactor.handle" $ "Processing DidSaveTextDocument  for: " ++ show fileName
-      callGF doc fileName
+      callGF logger doc fileName
       -- sendDiagnostics "Example message" (J.toNormalizedUri doc) Nothing
 
   , requestHandler J.STextDocumentRename $ \req responder -> do
@@ -303,7 +303,7 @@ handle logger = mconcat
           ms = J.HoverContents $ J.markedUpContent "lsp-hello" "" -- "Your type info here!"
           range = J.Range pos pos
           fileName = J.uriToFilePath $ doc ^. J.uri
-      -- callGF fileName
+      -- callGF logger fileName
       responder (Right $ Just rsp)
 
   , requestHandler J.STextDocumentDocumentSymbol $ \req responder -> do
@@ -352,13 +352,12 @@ handle logger = mconcat
 outputDir :: String
 outputDir = "generated"
 
-callGF :: J.Uri -> Maybe FilePath -> LspM LspContext ()
-callGF _ Nothing = do
+callGF :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> J.Uri -> Maybe FilePath -> LspM LspContext ()
+callGF logger _ Nothing = do
   liftIO $ hPutStrLn stderr "No file"
-callGF doc (Just filename) = do
+callGF logger doc (Just filename) = do
   -- mkdir
-  -- TODO: fix this
-  -- debugM logger "reactor.handle" "Starting GF"
+  debugM logger "reactor.handle" "Starting GF"
   liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
 
   liftIO $ createDirectoryIfMissing False outputDir
@@ -377,9 +376,9 @@ callGF doc (Just filename) = do
   -- compileSourceFiles
   cEnv <- getCompileEnv
   r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
-  -- debugM logger "reactor.handle" "Ran GF"
+  debugM logger "reactor.handle" "Ran GF"
 
-  mkDiagnostics opts doc r
+  mkDiagnostics logger opts doc r
   liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
 
 getCompileEnv :: LspM LspContext CompileEnv
@@ -392,15 +391,15 @@ setCompileEnv newEnv = do
     -- TODO: Check that it matches the expected old value
     writeTVar envV newEnv
 
-mkDiagnostics :: GF.Options -> J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
-mkDiagnostics _ doc (GF.Ok x) = do
+mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> GF.Options -> J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
+mkDiagnostics logger _ doc (GF.Ok x) = do
   -- setCompileEnv x
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
-mkDiagnostics opts doc (GF.Bad msg) = do
+mkDiagnostics logger opts doc (GF.Bad msg) = do
 
   -- TODO fixme
-  -- warningM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
+  warningM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
 
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
