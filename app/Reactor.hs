@@ -90,8 +90,8 @@ data Config = Config { fooTheBar :: Bool, wibbleFactor :: Int }
 run :: IO Int
 run = flip E.catches handlers $ do
 
-  logChan  <- atomically newTChan :: IO (TChan (WithSeverity T.Text))
-  -- logChan  <- newEmptyMVar :: IO (MVar (WithSeverity T.Text))
+  -- logChan  <- atomically newTChan :: IO (TChan (WithSeverity T.Text))
+  logChan  <- newEmptyMVar :: IO (MVar (WithSeverity T.Text))
   -- logChan  <- atomically newTChan :: IO (TChan (IO ()))
   rin  <- atomically newTChan :: IO (TChan ReactorInput)
   cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
@@ -99,12 +99,13 @@ run = flip E.catches handlers $ do
 
   -- Log in a separate thread
   forkIO $ forever $ do
-    msg <- atomically $ readTChan logChan
+    -- msg <- atomically $ readTChan logChan
+    msg <- takeMVar logChan
     hPrint stderr msg
 
   let
-    logToChan :: MonadIO m => TChan msg -> LogAction m msg
-    logToChan chan = LogAction $ liftIO . atomically . writeTChan chan
+    logToChan :: MonadIO m => MVar msg -> LogAction m msg
+    logToChan chan = LogAction $ liftIO . putMVar chan
     -- logChan = LogAction $ liftIO . hPutStrLn stderr
 
     -- Three loggers:
