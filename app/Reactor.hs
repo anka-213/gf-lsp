@@ -119,7 +119,8 @@ run = flip E.catches handlers $ do
     clientLogger = defaultClientLogger
     dualLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
     -- dualLogger = clientLogger <> L.hoistLogAction liftIO stderrLogger
-    dualLogger = L.hoistLogAction liftIO stderrLogger
+    -- dualLogger = L.hoistLogAction liftIO stderrLogger
+    dualLogger = clientLogger
 
     serverDefinition = ServerDefinition
       { defaultConfig = LspContext { compileEnv = cEnv, config = Config {fooTheBar = False, wibbleFactor = 0 }}
