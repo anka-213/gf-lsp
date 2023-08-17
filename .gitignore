@@ -29,3 +29,6 @@ cabal.project.local
 
 # Other
 local
+
+.nixie
+result

@@ -5,13 +5,25 @@ let
 
   gitignore = pkgs.nix-gitignore.gitignoreSourcePure [ ".github\n.git\n" ./.nixignore ./.gitignore ./.git/info/exclude ];
 
+
   myHaskellPackages = pkgs.haskell.packages.${compiler}.override {
     overrides = hself: hsuper: {
       "gf-lsp" =
-        hself.callCabal2nix
-          "gf-lsp"
-          (gitignore ./.)
-          { };
+        pkgs.haskell.lib.overrideCabal
+          (hself.callCabal2nix
+            "gf-lsp"
+            (gitignore ./.)
+            {
+              # ncurses = (pkgs.ncurses.override { enableStatic = true; });
+            })
+          {
+            executableSystemDepends = [
+              (pkgs.ncurses.override { enableStatic = true; })
+              # (pkgs.ncurses)
+              (pkgs.libiconv.override { enableStatic = true; enableShared = false; })
+              (pkgs.gmp.override { withStatic = true; })
+            ];
+          };
       gf = pkgs.haskell.lib.overrideCabal
         (
           # pkgs.haskell.lib.disableCabalFlag
@@ -35,33 +47,40 @@ let
               ./nix/revert-new-cabal-madness.patch
             ];
             jailbreak = true;
+            # executableSystemDepends = [
+            #   (pkgs.ncurses.override { enableStatic = true; })
+            # ];
+            # executableHaskellDepends = [ ];
           }
         );
     };
   };
 
-  shell = myHaskellPackages.shellFor {
-    packages = p: [
-      p."gf-lsp"
-    ];
-    buildInputs = [
-      myHaskellPackages.haskell-language-server
-      pkgs.haskellPackages.cabal-install
-      pkgs.haskellPackages.ghcid
-      pkgs.haskellPackages.ormolu
-      pkgs.haskellPackages.hlint
-      pkgs.niv
-      pkgs.nixpkgs-fmt
-    ];
-    withHoogle = true;
-  };
+  shell = myHaskellPackages.shellFor
+    {
+      packages = p: [
+        p."gf-lsp"
+      ];
+      buildInputs = [
+        myHaskellPackages.haskell-language-server
+        pkgs.haskellPackages.cabal-install
+        pkgs.haskellPackages.ghcid
+        pkgs.haskellPackages.ormolu
+        pkgs.haskellPackages.hlint
+        pkgs.niv
+        pkgs.nixpkgs-fmt
+      ];
+      withHoogle = true;
+    };
 
-  exe = pkgs.haskell.lib.justStaticExecutables (myHaskellPackages."gf-lsp");
+  exe = pkgs.haskell.lib.justStaticExecutables
+    (myHaskellPackages."gf-lsp");
 
-  docker = pkgs.dockerTools.buildImage {
-    name = "gf-lsp";
-    config.Cmd = [ "${exe}/bin/gf-lsp" ];
-  };
+  docker = pkgs.dockerTools.buildImage
+    {
+      name = "gf-lsp";
+      config.Cmd = [ "${exe}/bin/gf-lsp" ];
+    };
 in
 {
   inherit shell;
