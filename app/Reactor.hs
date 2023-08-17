@@ -427,7 +427,7 @@ setCompileEnv newEnv = do
 
 mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> GF.Options -> J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
 mkDiagnostics logger _ doc (GF.Ok x) = do
-  -- setCompileEnv x
+  setCompileEnv x
   -- debugM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
