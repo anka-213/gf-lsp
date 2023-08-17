@@ -45,6 +45,7 @@ import qualified Language.LSP.Types            as J
 import qualified Language.LSP.Types.Lens       as J
 import           Language.LSP.VFS
 import           System.Exit
+import qualified System.Process as Process
 import System.IO
     ( stdin, hPutStrLn, stderr, Handle, stdout, hPrint )
 -- import System.Log.Logger
@@ -96,6 +97,7 @@ run = flip E.catches handlers $ do
   rin  <- atomically newTChan :: IO (TChan ReactorInput)
   cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
   -- LC.withBackgroundLogger
+  realStdout <- hDuplicate stdout
 
   -- Log in a separate thread
   forkIO $ forever $ do
@@ -149,7 +151,7 @@ run = flip E.catches handlers $ do
     (L.cmap (fmap logToText) stderrLogger)
     (L.cmap (fmap logToText) dualLogger)
     stdin
-    stdout
+    realStdout
     serverDefinition
 
   where
@@ -375,6 +377,7 @@ outputDir = "generated"
 callGF :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> J.Uri -> Maybe FilePath -> LspM LspContext ()
 callGF logger _ Nothing = do
   -- liftIO $ hPutStrLn stderr "No file"
+  errorM logger "reactor.handle" "No file"
   pure ()
 callGF logger doc (Just filename) = do
   -- mkdir
@@ -396,8 +399,12 @@ callGF logger doc (Just filename) = do
   -- let flags = defaultFlags
   -- compileSourceFiles
   cEnv <- getCompileEnv
-  r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
+  -- r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
+  (errOut, (output, r)) <- liftIO $ captureStdErr $ captureStdout $ GF.tryIOE $ compileModule opts cEnv filename
   debugM logger "reactor.handle" "Ran GF"
+  debugM logger "reactor.handle" $ "Got stderr: " ++ show errOut
+  debugM logger "reactor.handle" $ "Got stdout: " ++ show output
+
 
   mkDiagnostics logger opts doc r
   -- liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
@@ -558,6 +565,23 @@ debugM logger tag message = logger <& (tag <> ": " <> T.pack message) `WithSever
 
 warningM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
 warningM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Warning
+
+errorM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
+errorM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Error
+
+-- TODO: save stderr to string
+captureStdErr :: IO a -> IO (String, a)
+captureStdErr = captureHandleString stderr
+captureStdout :: IO a -> IO (String, a)
+captureStdout = captureHandleString stdout
+captureHandleString :: Handle -> IO a -> IO (String, a)
+captureHandleString handle act = do
+  (readEnd, writeEnd) <- Process.createPipe
+  -- TODO: Read the actual content
+  res <- goBracket act writeEnd handle
+  output <- hGetContents' readEnd
+  pure (output, res)
+
 
 stdoutToStdErr :: IO a -> IO a
 stdoutToStdErr act = goBracket act stderr stdout

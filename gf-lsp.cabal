@@ -40,6 +40,7 @@ executable gf-lsp
                     , lsp
                     , lsp-types
                     , prettyprinter
+                    , process
                     , split
                     , stm
                     , text
