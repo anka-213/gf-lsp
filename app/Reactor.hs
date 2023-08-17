@@ -25,6 +25,7 @@ and plug it into your client of choice.
 module Main (main) where
 import           Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
 import qualified Colog.Core as L
+import qualified Colog.Concurrent as LC
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
 import qualified Control.Exception                     as E
@@ -89,20 +90,36 @@ data Config = Config { fooTheBar :: Bool, wibbleFactor :: Int }
 run :: IO Int
 run = flip E.catches handlers $ do
 
+  logChan  <- atomically newTChan :: IO (TChan (WithSeverity T.Text))
+  -- logChan  <- newEmptyMVar :: IO (MVar (WithSeverity T.Text))
+  -- logChan  <- atomically newTChan :: IO (TChan (IO ()))
   rin  <- atomically newTChan :: IO (TChan ReactorInput)
   cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
+  -- LC.withBackgroundLogger
+
+  -- Log in a separate thread
+  forkIO $ forever $ do
+    msg <- atomically $ readTChan logChan
+    hPrint stderr msg
 
   let
-        -- Three loggers:
+    logToChan :: MonadIO m => TChan msg -> LogAction m msg
+    logToChan chan = LogAction $ liftIO . atomically . writeTChan chan
+    -- logChan = LogAction $ liftIO . hPutStrLn stderr
+
+    -- Three loggers:
     -- 1. To stderr
     -- 2. To the client (filtered by severity)
     -- 3. To both
     stderrLogger :: LogAction IO (WithSeverity T.Text)
-    stderrLogger = L.cmap show L.logStringStderr
+    -- stderrLogger = L.cmap show L.logStringStderr
+    -- stderrLogger = logToChan logChan
+    stderrLogger = mempty
     clientLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
     clientLogger = defaultClientLogger
     dualLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
-    dualLogger = clientLogger <> L.hoistLogAction liftIO stderrLogger
+    -- dualLogger = clientLogger <> L.hoistLogAction liftIO stderrLogger
+    dualLogger = L.hoistLogAction liftIO stderrLogger
 
     serverDefinition = ServerDefinition
       { defaultConfig = LspContext { compileEnv = cEnv, config = Config {fooTheBar = False, wibbleFactor = 0 }}
@@ -115,6 +132,7 @@ run = flip E.catches handlers $ do
       , doInitialize = \env _ -> forkIO (reactor stderrLogger rin) >> pure (Right env)
       -- Handlers log to both the client and stderr
       , staticHandlers = lspHandlers dualLogger rin
+      -- , staticHandlers = lspHandlers clientLogger rin
       , interpretHandler = \env -> Iso (runLspT env) liftIO
       , options = lspOptions
       }
@@ -354,11 +372,12 @@ outputDir = "generated"
 
 callGF :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> J.Uri -> Maybe FilePath -> LspM LspContext ()
 callGF logger _ Nothing = do
-  liftIO $ hPutStrLn stderr "No file"
+  -- liftIO $ hPutStrLn stderr "No file"
+  pure ()
 callGF logger doc (Just filename) = do
   -- mkdir
   debugM logger "reactor.handle" "Starting GF"
-  liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
+  -- liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
 
   liftIO $ createDirectoryIfMissing False outputDir
   -- optOutputDir
@@ -379,7 +398,7 @@ callGF logger doc (Just filename) = do
   debugM logger "reactor.handle" "Ran GF"
 
   mkDiagnostics logger opts doc r
-  liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
+  -- liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
 
 getCompileEnv :: LspM LspContext CompileEnv
 getCompileEnv = liftIO . readTVarIO . compileEnv =<< getConfig
