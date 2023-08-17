@@ -97,13 +97,17 @@ run = flip E.catches handlers $ do
   rin  <- atomically newTChan :: IO (TChan ReactorInput)
   cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
   -- LC.withBackgroundLogger
+
+  -- Duplicate the stdout and stderr handle so we can capture them without getting a mixup
+  -- This can still cause confusion if we call GF twice at the same time
   realStdout <- hDuplicate stdout
+  realStderr <- hDuplicate stderr
 
   -- Log in a separate thread
   forkIO $ forever $ do
     -- msg <- atomically $ readTChan logChan
     msg <- takeMVar logChan
-    hPrint stderr msg
+    hPrint realStderr msg
 
   let
     logToChan :: MonadIO m => MVar msg -> LogAction m msg
@@ -115,9 +119,9 @@ run = flip E.catches handlers $ do
     -- 2. To the client (filtered by severity)
     -- 3. To both
     stderrLogger :: LogAction IO (WithSeverity T.Text)
-    -- stderrLogger = L.cmap show L.logStringStderr
+    stderrLogger = L.cmap show $ L.logStringHandle realStderr
     -- stderrLogger = logToChan logChan
-    stderrLogger = mempty
+    -- stderrLogger = mempty
     clientLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
     clientLogger = defaultClientLogger
     dualLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
