@@ -393,7 +393,8 @@ callGF logger doc (Just filename) = do
         , GF.optGFODir = Just outputDir
         , GF.optMode = GF.ModeCompiler
         , GF.optPMCFG = False
-        , GF.optVerbosity = GF.Verbose
+        -- , GF.optVerbosity = GF.Verbose
+        , GF.optVerbosity = GF.Normal
         -- , GF.optStopAfterPhase = Linker -- Default Compile
          }
   -- let flags = defaultFlags
