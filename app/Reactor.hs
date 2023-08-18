@@ -484,7 +484,6 @@ mkDiagnostics logger _ doc warningForest (GF.Ok x) = do
   pure ()
 mkDiagnostics logger opts doc warnings (GF.Bad msg) = do
 
-  -- TODO fixme
   warningM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
 
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
@@ -638,7 +637,6 @@ warningM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` 
 errorM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
 errorM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Error
 
--- TODO: save stderr to string
 captureStdErr :: IO a -> IO (String, a)
 captureStdErr = captureHandleString stderr
 captureStdout :: IO a -> IO (String, a)
@@ -655,6 +653,7 @@ captureHandleString handle act = do
 stdoutToStdErr :: IO a -> IO a
 stdoutToStdErr act = goBracket act stderr stdout
 
+-- | Copy a handle to another within a bracket
 goBracket :: IO a -> Handle -> Handle -> IO a
 goBracket go tmpHandle h = do
   buffering <- hGetBuffering h
