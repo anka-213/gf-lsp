@@ -35,7 +35,7 @@ executable gf-lsp
                     , gf
                     -- , hslogger
                     , co-log-core
-                    , co-log-concurrent
+                    -- , co-log-concurrent
                     , lens
                     , lsp
                     , lsp-types
