@@ -87,6 +87,10 @@ main = do
     0 -> exitSuccess
     c -> exitWith . ExitFailure $ c
 
+-- | The directory to put .gfo files
+outputDir :: String
+outputDir = ".gf-lsp"
+
 -- ---------------------------------------------------------------------
 
 data LspContext = LspContext { compileEnv :: TVar CompileEnv , config :: Config }
@@ -386,9 +390,6 @@ handle logger = mconcat
           update (ProgressAmount (Just (i * 10)) (Just "Doing stuff"))
           liftIO $ threadDelay (1 * 1000000)
   ]
-
-outputDir :: String
-outputDir = "generated"
 
 callGF :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> J.Uri -> Maybe FilePath -> LspM LspContext ()
 callGF logger _ Nothing = do
