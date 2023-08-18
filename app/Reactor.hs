@@ -563,10 +563,10 @@ parseWarning :: Tree (Int, String) -> [(String, Maybe String)]
 --   , [realWarn,""] <- splitOn blackColorEscape wrn = [realWarn]
 parseWarning (Node (_n, wrn) [])
   | "Warning: no linearization type for" `List.isPrefixOf` wrn
-  = [(wrn, Just "lin")]
+  = [(wrn, Just "lincat")]
 parseWarning (Node (_n, wrn) [])
   | "Warning: no linearization of" `List.isPrefixOf` wrn
-  = [(wrn, Just "lincat")]
+  = [(wrn, Just "lin")]
 parseWarning (Node (_n, wrn) [])
   | ("Warning:": itemType : itemName : _) <- words wrn
   , itemType `elem` ["function", "category"]
