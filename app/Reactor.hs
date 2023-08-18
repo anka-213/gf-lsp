@@ -118,8 +118,10 @@ run = flip E.catches handlers $ do
     -- 1. To stderr
     -- 2. To the client (filtered by severity)
     -- 3. To both
+    -- prettyMsg l = "[" <> viaShow (L.getSeverity l) <> "] " <> pretty (L.getMsg l)
+    prettyMsg l = "[" <> show (L.getSeverity l) <> "] " <> T.unpack (L.getMsg l)
     stderrLogger :: LogAction IO (WithSeverity T.Text)
-    stderrLogger = L.cmap show $ L.logStringHandle realStderr
+    stderrLogger = L.cmap prettyMsg $ L.logStringHandle realStderr
     -- stderrLogger = logToChan logChan
     -- stderrLogger = mempty
     clientLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
