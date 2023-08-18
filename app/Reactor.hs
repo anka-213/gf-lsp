@@ -63,7 +63,7 @@ import System.Environment (withArgs, setEnv)
 import qualified GF.Support as GF
 -- import qualified GF.Compile as S
 -- import GF.Compiler (linkGrammars)
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (fromMaybe, isNothing, listToMaybe)
 -- import Data.Time (UTCTime)
 import GHC.IO.Handle
 import Data.List.Split
@@ -72,6 +72,7 @@ import Control.Arrow (first)
 import qualified Data.List as List
 import Data.Function (on)
 import Data.Ord (comparing)
+import Control.Applicative ((<|>))
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -427,6 +428,8 @@ getCompileEnv = liftIO . readTVarIO . compileEnv =<< getConfig
 
 setCompileEnv :: CompileEnv -> LspM LspContext ()
 setCompileEnv newEnv = do
+  -- TODO: This causes race conditions
+  -- If possible delay creating new env until inside the atomically
   envV <- compileEnv <$> getConfig
   liftIO $ atomically $ do
     -- TODO: Check that it matches the expected old value
@@ -459,11 +462,22 @@ mkDiagnostics logger _ _doc warningForest (GF.Ok x) = do
   if null parsedWarnings
     then flushDiagnosticsBySource 100 $ Just "gf-parser"
     else do
-      let diagsWithFiles = [(filename, diagFor J.DsWarning range msg) | (filename, range, msg) <- parsedWarnings ]
+      let diagsWithFiles = [(filename, (range, msg)) | (filename, range, msg) <- parsedWarnings ]
       case groupByFst diagsWithFiles of
-        [(relFile, diags)] -> do
+        [(relFile, diagInfo)] -> do
           absFile <- liftIO $ canonicalizePath relFile
           let nuri' = toNuri absFile
+          --
+          mdoc <- getVirtualFile nuri'
+          fileText <- case mdoc of
+            Just vf -> do
+              let fileText = virtualFileText vf
+              debugM logger "foo" $ "Found file: " ++ show fileText
+              pure $ Just $ T.unpack fileText -- TODO: Make this more efficient
+            Nothing -> do
+              debugM logger "foo" $ "Couldn't find file: " ++ show relFile
+              pure Nothing
+          let diags = [diagFor J.DsWarning (guessRange range ident fileText) msg | (range, (msg, ident)) <- diagInfo]
           publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
         _ -> warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
   pure ()
@@ -513,20 +527,45 @@ defRange = J.Range (J.Position 0 1) (J.Position 20 5)
 splitErrors :: String -> [String]
 splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> head x /= ' ') . lines
 
--- TODO: Make this more intelligent
-parseWarnings :: IndentTree -> [(FilePath, J.Range, String)]
+-- TODO: Make this more intelligent by handling more cases and figuring out locations
+parseWarnings :: IndentTree -> [(FilePath, Maybe J.Range, (String, Maybe String))]
 parseWarnings (Node (0, h) chldrn) | [filename, ""] <- splitOn ":" h =
-  [(filename, defRange, aWarning) | warning <- chldrn, aWarning <- parseWarning warning]
+  [(filename, Nothing, aWarning) | warning <- chldrn, aWarning <- parseWarning warning]
 parseWarnings _ = []
+
+-- | Find which line number has a string
+--
+-- >>> findLineNumber "hi" "foo bar hi\n  hi there"
+findLineNumber :: String -> String -> Maybe Int
+findLineNumber needle haystack = listToMaybe startThings
+  where
+    myLines = zip [1..] $ lines haystack
+    -- Cases where the first non-space is the desired token
+    startThings = [lineNr | (lineNr, str) <- myLines , (frstWord:_) <- [words str], frstWord == needle]
+    -- TODO: Handle more cases
+
+guessRange :: Maybe J.Range -> Maybe String -> Maybe String -> J.Range
+guessRange origRange ident fileText = fromMaybe defRange $
+    origRange
+  <|> do
+    lineNrI <- findLineNumber <$> ident <*> fileText
+    lineNr <- fromIntegral <$> lineNrI
+    pure $ mkRange lineNr 1  (lineNr + 1) 1
+
 
 -- blackColorEscape = "\ESC[39;49m"
 
-parseWarning :: Tree (Int, String) -> [String]
+-- | Returns a list of warnings and token names they are warning about
+parseWarning :: Tree (Int, String) -> [(String, Maybe String)]
 -- parseWarning (Node (n, wrn) [])
 --   | "Warning:" `List.isPrefixOf` wrn
 --   -- Remove color escape codes from GF output
 --   , [realWarn,""] <- splitOn blackColorEscape wrn = [realWarn]
-parseWarning (Node (_n, wrn) []) | "Warning:" `List.isPrefixOf` wrn = [wrn]
+parseWarning (Node (_n, wrn) [])
+  | ("Warning:": itemType : itemName : _) <- words wrn
+  , itemType `elem` ["function", "category"]
+  = [(wrn, Just itemName)]
+parseWarning (Node (_n, wrn) []) | "Warning:" `List.isPrefixOf` wrn = [(wrn, Nothing)]
 parseWarning _ = []
 
 parseErrorMessage :: String -> Maybe (FilePath, J.Range)
