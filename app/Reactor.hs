@@ -63,13 +63,15 @@ import System.Environment (withArgs)
 import qualified GF.Support as GF
 import qualified GF.Compile as S
 import GF.Compiler (linkGrammars)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Time (UTCTime)
 import GHC.IO.Handle
 import Data.List.Split
 import Text.ParserCombinators.ReadP
 import Control.Arrow (first)
 import qualified Data.List as List
+import Data.Function (on)
+import Data.Ord (comparing)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -395,8 +397,8 @@ callGF logger _ Nothing = do
   pure ()
 callGF logger doc (Just filename) = do
   -- mkdir
-  debugM logger "reactor.handle" "Starting GF"
-  -- liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
+  -- debugM logger "reactor.handle" "Starting GF"
+  debugM logger "reactor.handle" $ "Starting gf for " ++ filename
 
   liftIO $ createDirectoryIfMissing False outputDir
   -- optOutputDir
@@ -441,12 +443,40 @@ setCompileEnv newEnv = do
     -- TODO: Check that it matches the expected old value
     writeTVar envV newEnv
 
+-- | Make a simple diagnostic from a severity, a range and a string
+diagFor :: J.DiagnosticSeverity -> J.Range -> String -> J.Diagnostic
+diagFor severity rng msg = J.Diagnostic
+          rng
+          (Just severity)  -- severity
+          Nothing  -- code
+          (Just "gf-parser") -- source
+          (T.pack msg)
+          Nothing -- tags
+          (Just (J.List []))
+
+-- | Group a list of pairs into pairs of lists grouped by the first element
+--
+-- >>> groupByFst [(1,'h'),(2,'w'),(1,'e'),(2,'o'),(1,'l'),(2,'r'),(2,'l'),(1,'l'),(2,'d'),(1,'o')]
+-- [(1,"hello"),(2,"world")]
+groupByFst :: Ord a => [(a, b)] -> [(a, [b])]
+groupByFst = map (\xs -> (fst (head xs), map snd xs)) . List.groupBy ((==) `on` fst) . List.sortBy (comparing fst)
+
 mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
   -> GF.Options -> J.Uri -> IndentForest -> GF.Err CompileEnv
   -> LspT LspContext IO ()
-mkDiagnostics logger _ doc warnings (GF.Ok x) = do
+mkDiagnostics logger _ doc warningForest (GF.Ok x) = do
   setCompileEnv x
-  flushDiagnosticsBySource 100 $ Just "gf-parser"
+  let parsedWarnings = parseWarnings =<< warningForest
+  if null parsedWarnings
+    then flushDiagnosticsBySource 100 $ Just "gf-parser"
+    else do
+      let diagsWithFiles = [(filename, diagFor J.DsWarning range msg) | (filename, range, msg) <- parsedWarnings ]
+      case groupByFst diagsWithFiles of
+        [(relFile, diags)] -> do
+          absFile <- liftIO $ canonicalizePath relFile
+          let nuri' = toNuri absFile
+          publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
+        _ -> warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
   pure ()
 mkDiagnostics logger opts doc warnings (GF.Bad msg) = do
 
@@ -464,15 +494,7 @@ mkDiagnostics logger opts doc warnings (GF.Bad msg) = do
     msgs = splitErrors msg
     range = maybe (Nothing, defRange) (first Just) . parseErrorMessage
     (relFiles, ranges) = unzip $ map range msgs
-    diags = zipWith diagFor ranges msgs
-    diagFor rng msg = J.Diagnostic
-              rng
-              (Just J.DsError)  -- severity
-              Nothing  -- code
-              (Just "gf-parser") -- source
-              (T.pack msg)
-              Nothing -- tags
-              (Just (J.List []))
+    diags = zipWith (diagFor J.DsError) ranges msgs
   absFiles <- liftIO $ mapM (mapM canonicalizePath) relFiles
   -- absFiles <- liftIO $ mapM (getRealFile opts) relFiles
   liftIO $ hPrint stderr relFiles
@@ -483,6 +505,8 @@ mkDiagnostics logger opts doc warnings (GF.Bad msg) = do
     nuri' :: J.NormalizedUri
     nuri' = fromMaybe nuri (allEqual nuris) -- TODO: Do something better when they are not all equal
     -- fps = fromMaybe (error "BUG: fromMaybe") <$> map (J.uriToFilePath . J.fromNormalizedUri) nuris
+  when (isNothing (allEqual nuris)) $ do
+    warningM logger "" "Ignored errors from other files"
 
   liftIO $ hPrint stderr nuris
 
@@ -507,7 +531,13 @@ parseWarnings (Node (0, h) chldrn) | [filename, ""] <- splitOn ":" h =
   [(filename, defRange, aWarning) | warning <- chldrn, aWarning <- parseWarning warning]
 parseWarnings _ = []
 
+-- blackColorEscape = "\ESC[39;49m"
+
 parseWarning :: Tree (Int, String) -> [String]
+-- parseWarning (Node (n, wrn) [])
+--   | "Warning:" `List.isPrefixOf` wrn
+--   -- Remove color escape codes from GF output
+--   , [realWarn,""] <- splitOn blackColorEscape wrn = [realWarn]
 parseWarning (Node (n, wrn) []) | "Warning:" `List.isPrefixOf` wrn = [wrn]
 parseWarning _ = []
 
