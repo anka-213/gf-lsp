@@ -59,7 +59,7 @@ import qualified GF.Infra.Option as GF
 
 import GFExtras
 
-import System.Environment (withArgs)
+import System.Environment (withArgs, setEnv)
 import qualified GF.Support as GF
 import qualified GF.Compile as S
 import GF.Compiler (linkGrammars)
@@ -417,6 +417,9 @@ callGF logger doc (Just filename) = do
   -- compileSourceFiles
   cEnv <- getCompileEnv
   -- r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
+
+  -- Change term to prevent GF from outputting colors
+  liftIO $ setEnv "TERM" ""
   (errOut, (output, r)) <- liftIO $ captureStdErr $ captureStdout $ GF.tryIOE $ compileModule opts cEnv filename
   debugM logger "reactor.handle" "Ran GF"
   debugM logger "reactor.handle" $ "Got stderr: " ++ show errOut
