@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE TypeInType            #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+-- {-# OPTIONS_GHC -Wall #-}
 
 {- |
 This is an example language server built with haskell-lsp using a 'Reactor'
@@ -68,6 +69,7 @@ import GHC.IO.Handle
 import Data.List.Split
 import Text.ParserCombinators.ReadP
 import Control.Arrow (first)
+import qualified Data.List as List
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -418,9 +420,16 @@ callGF logger doc (Just filename) = do
   debugM logger "reactor.handle" $ "Got stderr: " ++ show errOut
   debugM logger "reactor.handle" $ "Got stdout: " ++ show output
 
+  -- Try parsing the warnings
+  let [(warningForest,"")] = readP_to_S parseForest errOut
+  mapM_ (debugM logger "parser" . show) warningForest
+  mapM_ (debugM logger "moreParsed" . show) $ parseWarnings =<< warningForest
 
-  mkDiagnostics logger opts doc r
+  mkDiagnostics logger opts doc warningForest r
   -- liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
+
+type IndentTree = Tree (Int, String)
+type IndentForest = [IndentTree]
 
 getCompileEnv :: LspM LspContext CompileEnv
 getCompileEnv = liftIO . readTVarIO . compileEnv =<< getConfig
@@ -432,12 +441,14 @@ setCompileEnv newEnv = do
     -- TODO: Check that it matches the expected old value
     writeTVar envV newEnv
 
-mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> GF.Options -> J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
-mkDiagnostics logger _ doc (GF.Ok x) = do
+mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
+  -> GF.Options -> J.Uri -> IndentForest -> GF.Err CompileEnv
+  -> LspT LspContext IO ()
+mkDiagnostics logger _ doc warnings (GF.Ok x) = do
   setCompileEnv x
   flushDiagnosticsBySource 100 $ Just "gf-parser"
   pure ()
-mkDiagnostics logger opts doc (GF.Bad msg) = do
+mkDiagnostics logger opts doc warnings (GF.Bad msg) = do
 
   -- TODO fixme
   warningM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
@@ -490,6 +501,16 @@ defRange = J.Range (J.Position 0 1) (J.Position 20 5)
 splitErrors :: String -> [String]
 splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> head x /= ' ') . lines
 
+-- TODO: Make this more intelligent
+parseWarnings :: IndentTree -> [(FilePath, J.Range, String)]
+parseWarnings (Node (0, h) chldrn) | [filename, ""] <- splitOn ":" h =
+  [(filename, defRange, aWarning) | warning <- chldrn, aWarning <- parseWarning warning]
+parseWarnings _ = []
+
+parseWarning :: Tree (Int, String) -> [String]
+parseWarning (Node (n, wrn) []) | "Warning:" `List.isPrefixOf` wrn = [wrn]
+parseWarning _ = []
+
 parseErrorMessage :: String -> Maybe (FilePath, J.Range)
 parseErrorMessage msg = case lines msg of
   (line1:rest) -> case splitOn ":" line1 of
@@ -503,6 +524,7 @@ parseErrorMessage msg = case lines msg of
       , [(l1,"")] <- reads lineS
       , [(l2,"")] <- reads lineE            -> Just (filename, mkRange l1 1 (l2+1) 1)
     _ -> Nothing
+  _ -> Nothing
 
 mkRange :: J.UInt -> J.UInt -> J.UInt -> J.UInt -> J.Range
 mkRange l1 c1 l2 c2 = J.Range (J.Position l1' c1') (J.Position l2' c2')
