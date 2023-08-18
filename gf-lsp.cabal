@@ -35,10 +35,12 @@ executable gf-lsp
                     , gf
                     -- , hslogger
                     , co-log-core
+                    -- , co-log-concurrent
                     , lens
                     , lsp
                     , lsp-types
                     , prettyprinter
+                    , process
                     , split
                     , stm
                     , text

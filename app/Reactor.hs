@@ -7,6 +7,8 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE TypeInType            #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -Wno-unticked-promoted-constructors #-}
 
 {- |
 This is an example language server built with haskell-lsp using a 'Reactor'
@@ -44,33 +46,39 @@ import qualified Language.LSP.Types            as J
 import qualified Language.LSP.Types.Lens       as J
 import           Language.LSP.VFS
 import           System.Exit
+import qualified System.Process as Process
 import System.IO
-    ( stdin, hPutStrLn, stderr, Handle, stdout, hPrint )
+    ( stdin, stderr, stdout, hPrint )
 -- import System.Log.Logger
 --     ( errorM, debugM, removeAllHandlers, Priority(DEBUG), warningM )
 import           Control.Concurrent
-import           System.Directory (createDirectoryIfMissing, copyFile, canonicalizePath)
+import           System.Directory (createDirectoryIfMissing, canonicalizePath)
 
 import qualified GF
 import qualified GF.Infra.Option as GF
 
 import GFExtras
 
-import System.Environment (withArgs)
+import System.Environment (withArgs, setEnv)
 import qualified GF.Support as GF
-import qualified GF.Compile as S
-import GF.Compiler (linkGrammars)
-import Data.Maybe (fromMaybe)
-import Data.Time (UTCTime)
+-- import qualified GF.Compile as S
+-- import GF.Compiler (linkGrammars)
+import Data.Maybe (fromMaybe, isNothing, listToMaybe)
+-- import Data.Time (UTCTime)
 import GHC.IO.Handle
 import Data.List.Split
 import Text.ParserCombinators.ReadP
 import Control.Arrow (first)
+import qualified Data.List as List
+import Data.Function (on)
+import Data.Ord (comparing)
+import Control.Applicative ((<|>))
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
 {-# ANN module ("HLint: ignore Redundant do"       :: String) #-}
 {-# ANN module ("HLint: ignore Reduce duplication" :: String) #-}
+{-# ANN module ("HLint: ignore Redundant lambda"   :: String) #-}
 -- ---------------------------------------------------------------------
 --
 
@@ -79,6 +87,10 @@ main = do
   run >>= \case
     0 -> exitSuccess
     c -> exitWith . ExitFailure $ c
+
+-- | The directory to put .gfo files
+outputDir :: String
+outputDir = ".gf-lsp"
 
 -- ---------------------------------------------------------------------
 
@@ -91,18 +103,26 @@ run = flip E.catches handlers $ do
 
   rin  <- atomically newTChan :: IO (TChan ReactorInput)
   cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
+  -- LC.withBackgroundLogger
+
+  -- Duplicate the stdout and stderr handle so we can capture them without getting a mixup
+  -- This can still cause confusion if we call GF twice at the same time
+  realStdout <- hDuplicate stdout
+  realStderr <- hDuplicate stderr
 
   let
-        -- Three loggers:
+    -- Three loggers:
     -- 1. To stderr
     -- 2. To the client (filtered by severity)
     -- 3. To both
+    prettyMsg l = "[" <> show (L.getSeverity l) <> "] " <> T.unpack (L.getMsg l)
     stderrLogger :: LogAction IO (WithSeverity T.Text)
-    stderrLogger = L.cmap show L.logStringStderr
+    stderrLogger = L.cmap prettyMsg $ L.logStringHandle realStderr
     clientLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
     clientLogger = defaultClientLogger
     dualLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
-    dualLogger = clientLogger <> L.hoistLogAction liftIO stderrLogger
+    -- dualLogger = clientLogger <> L.hoistLogAction liftIO stderrLogger
+    dualLogger = clientLogger
 
     serverDefinition = ServerDefinition
       { defaultConfig = LspContext { compileEnv = cEnv, config = Config {fooTheBar = False, wibbleFactor = 0 }}
@@ -115,6 +135,7 @@ run = flip E.catches handlers $ do
       , doInitialize = \env _ -> forkIO (reactor stderrLogger rin) >> pure (Right env)
       -- Handlers log to both the client and stderr
       , staticHandlers = lspHandlers dualLogger rin
+      -- , staticHandlers = lspHandlers clientLogger rin
       , interpretHandler = \env -> Iso (runLspT env) liftIO
       , options = lspOptions
       }
@@ -129,7 +150,7 @@ run = flip E.catches handlers $ do
     (L.cmap (fmap logToText) stderrLogger)
     (L.cmap (fmap logToText) dualLogger)
     stdin
-    stdout
+    realStdout
     serverDefinition
 
   where
@@ -249,12 +270,17 @@ handle logger = mconcat
       --             rsp = J.List [J.CodeLens (J.mkRange 0 0 0 100) (Just cmd) Nothing]
       --         responder (Right rsp)
 
+  , notificationHandler J.SCancelRequest $ \msg -> do
+      -- TODO: Actually try to cancel stuff
+      case msg ^. J.params of
+        (J.CancelParams reqId) -> debugM logger "reactor.handle" $ "Got cancel request for: " ++ show reqId
+
   , notificationHandler J.STextDocumentDidOpen $ \msg -> do
     let doc  = msg ^. J.params . J.textDocument . J.uri
         fileName =  J.uriToFilePath doc
     debugM logger "reactor.handle" $ "Processing DidOpenTextDocument for: " ++ show fileName
     -- sendDiagnostics "Example message" (J.toNormalizedUri doc) (Just 0)
-    callGF doc fileName
+    callGF logger doc fileName
 
   , notificationHandler J.SWorkspaceDidChangeConfiguration $ \msg -> do
       cfg <- config <$> getConfig
@@ -279,7 +305,7 @@ handle logger = mconcat
       let doc = msg ^. J.params . J.textDocument . J.uri
           fileName = J.uriToFilePath doc
       debugM logger "reactor.handle" $ "Processing DidSaveTextDocument  for: " ++ show fileName
-      callGF doc fileName
+      callGF logger doc fileName
       -- sendDiagnostics "Example message" (J.toNormalizedUri doc) Nothing
 
   , requestHandler J.STextDocumentRename $ \req responder -> do
@@ -303,7 +329,7 @@ handle logger = mconcat
           ms = J.HoverContents $ J.markedUpContent "lsp-hello" "" -- "Your type info here!"
           range = J.Range pos pos
           fileName = J.uriToFilePath $ doc ^. J.uri
-      -- callGF fileName
+      -- callGF logger fileName
       responder (Right $ Just rsp)
 
   , requestHandler J.STextDocumentDocumentSymbol $ \req responder -> do
@@ -320,7 +346,7 @@ handle logger = mconcat
           doc = params ^. J.textDocument
           (J.List diags) = params ^. J.context . J.diagnostics
           -- makeCommand only generates commands for diagnostics whose source is us
-          makeCommand (J.Diagnostic (J.Range start _) _s _c (Just "lsp-hello") _m _t _l) = [J.Command title cmd cmdparams]
+          makeCommand (J.Diagnostic (J.Range startPo _) _s _c (Just "lsp-hello") _m _t _l) = [J.Command title cmd cmdparams]
             where
               title = "Apply LSP hello command:" <> head (T.lines _m)
               -- NOTE: the cmd needs to be registered via the InitializeResponse message. See lspOptions above
@@ -328,7 +354,7 @@ handle logger = mconcat
               -- need 'file' and 'start_pos'
               args = J.List
                       [ J.Object $ H.fromList [("file",     J.Object $ H.fromList [("textDocument",J.toJSON doc)])]
-                      , J.Object $ H.fromList [("start_pos",J.Object $ H.fromList [("position",    J.toJSON start)])]
+                      , J.Object $ H.fromList [("start_pos",J.Object $ H.fromList [("position",    J.toJSON startPo)])]
                       ]
               cmdparams = Just args
           makeCommand (J.Diagnostic _r _s _c _source _m _t _l) = []
@@ -349,58 +375,115 @@ handle logger = mconcat
           liftIO $ threadDelay (1 * 1000000)
   ]
 
-outputDir :: String
-outputDir = "generated"
-
-callGF :: J.Uri -> Maybe FilePath -> LspM LspContext ()
-callGF _ Nothing = do
-  liftIO $ hPutStrLn stderr "No file"
-callGF doc (Just filename) = do
+callGF :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> J.Uri -> Maybe FilePath -> LspM LspContext ()
+callGF logger _ Nothing = do
+  -- liftIO $ hPutStrLn stderr "No file"
+  errorM logger "reactor.handle" "No file"
+  pure ()
+callGF logger doc (Just filename) = do
   -- mkdir
-  -- TODO: fix this
   -- debugM logger "reactor.handle" "Starting GF"
-  liftIO $ hPutStrLn stderr $ "Starting gf for " ++ filename
+  debugM logger "reactor.handle" $ "Starting gf for " ++ filename
 
   liftIO $ createDirectoryIfMissing False outputDir
   -- optOutputDir
   -- optGFODir
-  let defaultFlags = GF.flag id GF.noOptions
+  -- let defaultFlags = GF.flag id GF.noOptions
   let opts = GF.modifyFlags $ \flags -> flags
         { GF.optOutputDir = Just outputDir
         , GF.optGFODir = Just outputDir
         , GF.optMode = GF.ModeCompiler
         , GF.optPMCFG = False
-        , GF.optVerbosity = GF.Verbose
+        -- , GF.optVerbosity = GF.Verbose
+        , GF.optVerbosity = GF.Normal
         -- , GF.optStopAfterPhase = Linker -- Default Compile
          }
   -- let flags = defaultFlags
   -- compileSourceFiles
   cEnv <- getCompileEnv
-  r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
-  -- debugM logger "reactor.handle" "Ran GF"
+  -- r <- liftIO $ GF.tryIOE $ stdoutToStdErr $ compileModule opts cEnv filename
 
-  mkDiagnostics opts doc r
-  liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
+  -- Change term to prevent GF from outputting colors
+  liftIO $ setEnv "TERM" ""
+  (errOut, (output, r)) <- liftIO $ captureStdErr $ captureStdout $ GF.tryIOE $ compileModule opts cEnv filename
+  debugM logger "reactor.handle" "Ran GF"
+  debugM logger "reactor.handle" $ "Got stderr: " ++ show errOut
+  debugM logger "reactor.handle" $ "Got stdout: " ++ show output
+
+  -- Try parsing the warnings
+  let warningForest = case readP_to_S parseForest errOut of
+        [(x,"")] -> x
+        _ -> []
+  mapM_ (debugM logger "parser" . show) warningForest
+  mapM_ (debugM logger "moreParsed" . show) $ parseWarnings =<< warningForest
+
+  mkDiagnostics logger opts doc warningForest r
+  -- liftIO $ hPutStrLn stderr $ "Done with gf for " ++ filename
+
+type IndentTree = Tree (Int, String)
+type IndentForest = [IndentTree]
 
 getCompileEnv :: LspM LspContext CompileEnv
 getCompileEnv = liftIO . readTVarIO . compileEnv =<< getConfig
 
 setCompileEnv :: CompileEnv -> LspM LspContext ()
 setCompileEnv newEnv = do
+  -- TODO: This causes race conditions
+  -- If possible delay creating new env until inside the atomically
   envV <- compileEnv <$> getConfig
   liftIO $ atomically $ do
     -- TODO: Check that it matches the expected old value
     writeTVar envV newEnv
 
-mkDiagnostics :: GF.Options -> J.Uri -> GF.Err CompileEnv -> LspT LspContext IO ()
-mkDiagnostics _ doc (GF.Ok x) = do
-  -- setCompileEnv x
-  flushDiagnosticsBySource 100 $ Just "gf-parser"
-  pure ()
-mkDiagnostics opts doc (GF.Bad msg) = do
+-- | Make a simple diagnostic from a severity, a range and a string
+diagFor :: J.DiagnosticSeverity -> J.Range -> String -> J.Diagnostic
+diagFor severity rng msg = J.Diagnostic
+          rng
+          (Just severity)  -- severity
+          Nothing  -- code
+          (Just "gf-parser") -- source
+          (T.pack msg)
+          Nothing -- tags
+          (Just (J.List []))
 
-  -- TODO fixme
-  -- warningM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
+-- | Group a list of pairs into pairs of lists grouped by the first element
+--
+-- >>> groupByFst [(1,'h'),(2,'w'),(1,'e'),(2,'o'),(1,'l'),(2,'r'),(2,'l'),(1,'l'),(2,'d'),(1,'o')]
+-- [(1,"hello"),(2,"world")]
+groupByFst :: Ord a => [(a, b)] -> [(a, [b])]
+groupByFst = map (\xs -> (fst (head xs), map snd xs)) . List.groupBy ((==) `on` fst) . List.sortBy (comparing fst)
+
+mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
+  -> GF.Options -> J.Uri -> IndentForest -> GF.Err CompileEnv
+  -> LspT LspContext IO ()
+mkDiagnostics logger _ _doc warningForest (GF.Ok x) = do
+  setCompileEnv x
+  let parsedWarnings = parseWarnings =<< warningForest
+  if null parsedWarnings
+    then flushDiagnosticsBySource 100 $ Just "gf-parser"
+    else do
+      let diagsWithFiles = [(filename, (range, msg)) | (filename, range, msg) <- parsedWarnings ]
+      case groupByFst diagsWithFiles of
+        [(relFile, diagInfo)] -> do
+          absFile <- liftIO $ canonicalizePath relFile
+          let nuri' = toNuri absFile
+          --
+          mdoc <- getVirtualFile nuri'
+          fileText <- case mdoc of
+            Just vf -> do
+              let fileText = virtualFileText vf
+              debugM logger "foo" $ "Found file: " ++ show fileText
+              pure $ Just $ T.unpack fileText -- TODO: Make this more efficient
+            Nothing -> do
+              debugM logger "foo" $ "Couldn't find file: " ++ show relFile
+              pure Nothing
+          let diags = [diagFor J.DsWarning (guessRange range ident fileText) msg | (range, (msg, ident)) <- diagInfo]
+          publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
+        _ -> warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
+  pure ()
+mkDiagnostics logger _opts doc _warnings (GF.Bad msg) = do
+
+  warningM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
 
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
@@ -413,15 +496,7 @@ mkDiagnostics opts doc (GF.Bad msg) = do
     msgs = splitErrors msg
     range = maybe (Nothing, defRange) (first Just) . parseErrorMessage
     (relFiles, ranges) = unzip $ map range msgs
-    diags = zipWith diagFor ranges msgs
-    diagFor rng msg = J.Diagnostic
-              rng
-              (Just J.DsError)  -- severity
-              Nothing  -- code
-              (Just "gf-parser") -- source
-              (T.pack msg)
-              Nothing -- tags
-              (Just (J.List []))
+    diags = zipWith (diagFor J.DsError) ranges msgs
   absFiles <- liftIO $ mapM (mapM canonicalizePath) relFiles
   -- absFiles <- liftIO $ mapM (getRealFile opts) relFiles
   liftIO $ hPrint stderr relFiles
@@ -432,6 +507,8 @@ mkDiagnostics opts doc (GF.Bad msg) = do
     nuri' :: J.NormalizedUri
     nuri' = fromMaybe nuri (allEqual nuris) -- TODO: Do something better when they are not all equal
     -- fps = fromMaybe (error "BUG: fromMaybe") <$> map (J.uriToFilePath . J.fromNormalizedUri) nuris
+  when (isNothing (allEqual nuris)) $ do
+    warningM logger "" "Ignored errors from other files"
 
   liftIO $ hPrint stderr nuris
 
@@ -450,19 +527,61 @@ defRange = J.Range (J.Position 0 1) (J.Position 20 5)
 splitErrors :: String -> [String]
 splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> head x /= ' ') . lines
 
+-- TODO: Make this more intelligent by handling more cases and figuring out locations
+parseWarnings :: IndentTree -> [(FilePath, Maybe J.Range, (String, Maybe String))]
+parseWarnings (Node (0, h) chldrn) | [filename, ""] <- splitOn ":" h =
+  [(filename, Nothing, aWarning) | warning <- chldrn, aWarning <- parseWarning warning]
+parseWarnings _ = []
+
+-- | Find which line number has a string
+--
+-- >>> findLineNumber "hi" "foo bar hi\n  hi there"
+findLineNumber :: String -> String -> Maybe Int
+findLineNumber needle haystack = listToMaybe startThings
+  where
+    myLines = zip [1..] $ lines haystack
+    -- Cases where the first non-space is the desired token
+    startThings = [lineNr | (lineNr, str) <- myLines , (frstWord:_) <- [words str], frstWord == needle]
+    -- TODO: Handle more cases
+
+guessRange :: Maybe J.Range -> Maybe String -> Maybe String -> J.Range
+guessRange origRange ident fileText = fromMaybe defRange $
+    origRange
+  <|> do
+    lineNrI <- findLineNumber <$> ident <*> fileText
+    lineNr <- fromIntegral <$> lineNrI
+    pure $ mkRange lineNr 1  (lineNr + 1) 1
+
+
+-- blackColorEscape = "\ESC[39;49m"
+
+-- | Returns a list of warnings and token names they are warning about
+parseWarning :: Tree (Int, String) -> [(String, Maybe String)]
+-- parseWarning (Node (n, wrn) [])
+--   | "Warning:" `List.isPrefixOf` wrn
+--   -- Remove color escape codes from GF output
+--   , [realWarn,""] <- splitOn blackColorEscape wrn = [realWarn]
+parseWarning (Node (_n, wrn) [])
+  | ("Warning:": itemType : itemName : _) <- words wrn
+  , itemType `elem` ["function", "category"]
+  = [(wrn, Just itemName)]
+parseWarning (Node (_n, wrn) []) | "Warning:" `List.isPrefixOf` wrn = [(wrn, Nothing)]
+parseWarning _ = []
+
 parseErrorMessage :: String -> Maybe (FilePath, J.Range)
 parseErrorMessage msg = case lines msg of
   (line1:rest) -> case splitOn ":" line1 of
-    [filename,""] -> parseErrorMessage $ unlines $ map (unwords.words) rest
-    [filename , line , col , "" ]
-      | [(l,"")] <- reads line
+    [_filename,""] -> parseErrorMessage $ unlines $ map (unwords.words) rest
+    [filename , lineNr , col , "" ]
+      | [(l,"")] <- reads lineNr
       , [(c,"")] <- reads col               -> Just (filename, mkRange l c l (c+1))
-    [filename , line , "" ]
-      | [(l,"")] <- reads line              -> Just (filename, mkRange l 1 (l+1) 1)
-      | [lineS,lineE] <- splitOn "-" line
+    [filename , lineNr , "" ]
+      | [(l,"")] <- reads lineNr            -> Just (filename, mkRange l 1 (l+1) 1)
+      | [lineS,lineE] <- splitOn "-" lineNr
       , [(l1,"")] <- reads lineS
       , [(l2,"")] <- reads lineE            -> Just (filename, mkRange l1 1 (l2+1) 1)
     _ -> Nothing
+  _ -> Nothing
 
 mkRange :: J.UInt -> J.UInt -> J.UInt -> J.UInt -> J.Range
 mkRange l1 c1 l2 c2 = J.Range (J.Position l1' c1') (J.Position l2' c2')
@@ -539,9 +658,28 @@ debugM logger tag message = logger <& (tag <> ": " <> T.pack message) `WithSever
 warningM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
 warningM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Warning
 
-stdoutToStdErr :: IO a -> IO a
-stdoutToStdErr act = goBracket act stderr stdout
+errorM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
+errorM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Error
 
+captureStdErr :: IO a -> IO (String, a)
+captureStdErr = captureHandleString stderr
+
+captureStdout :: IO a -> IO (String, a)
+captureStdout = captureHandleString stdout
+
+captureHandleString :: Handle -> IO a -> IO (String, a)
+captureHandleString origHandle act = do
+  (readEnd, writeEnd) <- Process.createPipe
+  -- TODO: Read the actual content
+  res <- goBracket act writeEnd origHandle
+  output <- hGetContents' readEnd
+  pure (output, res)
+
+
+-- stdoutToStdErr :: IO a -> IO a
+-- stdoutToStdErr act = goBracket act stderr stdout
+
+-- | Copy a handle to another within a bracket
 goBracket :: IO a -> Handle -> Handle -> IO a
 goBracket go tmpHandle h = do
   buffering <- hGetBuffering h
