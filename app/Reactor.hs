@@ -73,6 +73,7 @@ import Control.Arrow (first)
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
 {-# ANN module ("HLint: ignore Redundant do"       :: String) #-}
 {-# ANN module ("HLint: ignore Reduce duplication" :: String) #-}
+{-# ANN module ("HLint: ignore Redundant lambda"   :: String) #-}
 -- ---------------------------------------------------------------------
 --
 
