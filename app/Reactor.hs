@@ -7,7 +7,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE TypeInType            #-}
 {-# LANGUAGE DuplicateRecordFields #-}
--- {-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -Wall #-}
 
 {- |
 This is an example language server built with haskell-lsp using a 'Reactor'
@@ -26,7 +26,6 @@ and plug it into your client of choice.
 module Main (main) where
 import           Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
 import qualified Colog.Core as L
-import qualified Colog.Concurrent as LC
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
 import qualified Control.Exception                     as E
@@ -100,9 +99,6 @@ data Config = Config { fooTheBar :: Bool, wibbleFactor :: Int }
 run :: IO Int
 run = flip E.catches handlers $ do
 
-  -- logChan  <- atomically newTChan :: IO (TChan (WithSeverity T.Text))
-  logChan  <- newEmptyMVar :: IO (MVar (WithSeverity T.Text))
-  -- logChan  <- atomically newTChan :: IO (TChan (IO ()))
   rin  <- atomically newTChan :: IO (TChan ReactorInput)
   cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
   -- LC.withBackgroundLogger
@@ -112,32 +108,18 @@ run = flip E.catches handlers $ do
   realStdout <- hDuplicate stdout
   realStderr <- hDuplicate stderr
 
-  -- Log in a separate thread
-  forkIO $ forever $ do
-    -- msg <- atomically $ readTChan logChan
-    msg <- takeMVar logChan
-    hPrint realStderr msg
-
   let
-    logToChan :: MonadIO m => MVar msg -> LogAction m msg
-    logToChan chan = LogAction $ liftIO . putMVar chan
-    -- logChan = LogAction $ liftIO . hPutStrLn stderr
-
     -- Three loggers:
     -- 1. To stderr
     -- 2. To the client (filtered by severity)
     -- 3. To both
-    -- prettyMsg l = "[" <> viaShow (L.getSeverity l) <> "] " <> pretty (L.getMsg l)
     prettyMsg l = "[" <> show (L.getSeverity l) <> "] " <> T.unpack (L.getMsg l)
     stderrLogger :: LogAction IO (WithSeverity T.Text)
     stderrLogger = L.cmap prettyMsg $ L.logStringHandle realStderr
-    -- stderrLogger = logToChan logChan
-    -- stderrLogger = mempty
     clientLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
     clientLogger = defaultClientLogger
     dualLogger :: LogAction (LspM LspContext) (WithSeverity T.Text)
     -- dualLogger = clientLogger <> L.hoistLogAction liftIO stderrLogger
-    -- dualLogger = L.hoistLogAction liftIO stderrLogger
     dualLogger = clientLogger
 
     serverDefinition = ServerDefinition
@@ -639,8 +621,10 @@ errorM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Er
 
 captureStdErr :: IO a -> IO (String, a)
 captureStdErr = captureHandleString stderr
+
 captureStdout :: IO a -> IO (String, a)
 captureStdout = captureHandleString stdout
+
 captureHandleString :: Handle -> IO a -> IO (String, a)
 captureHandleString handle act = do
   (readEnd, writeEnd) <- Process.createPipe
