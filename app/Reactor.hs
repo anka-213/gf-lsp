@@ -366,15 +366,31 @@ handle logger = mconcat
                 , GF.optVerbosity = GF.Quiet
                 -- , GF.optStopAfterPhase = Linker -- Default Compile
                 }
-          -- pgf <- liftIO $ GF.link opts (_ , gr)
-          -- GF.Compile.link converts gr to pgf
-          -- Use verb: Quiet
-          -- foo <- liftIO $ _ $ PGF.inferExpr gr
-          debugM logger "hover.handle" $ "For file named: " ++ show (takeBaseName <$> fileName)
-          debugM logger "hover.handle" $ "Modules available: " ++ show (fst <$> GF.modules gr)
-          let ms = J.HoverContents $ J.markedUpContent "lsp-hello" fullWord
-              rsp = J.Hover ms (Just range)
-          responder (Right $ Just rsp)
+          case takeBaseName <$> fileName of
+            Nothing -> do
+              -- TODO: Clean this nesting up
+              debugM logger "reactor.handle" $ "Didn't find filename for: " ++ show doc
+              responder (Right Nothing)
+            Just moduleName -> do
+              debugM logger "hover.handle" $ "For file named: " ++ show moduleName
+              debugM logger "hover.handle" $ "Modules available: " ++ show (fst <$> GF.modules gr)
+              -- GF.Compile.link converts gr to pgf
+              pgf <- liftIO $ GF.link opts (GF.moduleNameS moduleName , gr)
+              case PGF.readExpr $ T.unpack fullWord of
+                Nothing -> do
+                  debugM logger "reactor.handle" $ "Invalid expression: " ++ show fullWord
+                  responder (Right Nothing)
+                Just expr -> do
+                  case PGF.inferExpr pgf expr of
+                    Left errorMessage -> do
+                      debugM logger "reactor.handle" $ "Unable to find type of expr: " ++ show fullWord
+                      debugM logger "reactor.handle" $ "Got error: " ++ show (PGF.ppTcError errorMessage)
+                      responder (Right Nothing)
+                    Right (expr', exprType) -> do
+                      let message = PGF.showExpr [] expr' ++ " : " ++ PGF.showType [] exprType
+                      let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack message
+                          rsp = J.Hover ms (Just range)
+                      responder (Right $ Just rsp)
         Nothing -> do
           debugM logger "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
           responder (Right Nothing)
