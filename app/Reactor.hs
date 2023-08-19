@@ -95,6 +95,12 @@ main = do
 outputDir :: String
 outputDir = ".gf-lsp"
 
+-- TODO: Generate type lenses for functions
+-- TODO: Show concrete types on hover
+-- TODO: Only load abstract pgf
+-- TODO: Don't regenerate pgf for each hover
+
+
 -- ---------------------------------------------------------------------
 
 data LspContext = LspContext { compileEnv :: TVar CompileEnv , config :: Config }
@@ -375,12 +381,12 @@ handle logger = mconcat
               debugM logger "hover.handle" $ "For file named: " ++ show moduleName
               debugM logger "hover.handle" $ "Modules available: " ++ show (fst <$> GF.modules gr)
               -- GF.Compile.link converts gr to pgf
-              pgf <- liftIO $ GF.link opts (GF.moduleNameS moduleName , gr)
               case PGF.readExpr $ T.unpack fullWord of
                 Nothing -> do
                   debugM logger "reactor.handle" $ "Invalid expression: " ++ show fullWord
                   responder (Right Nothing)
                 Just expr -> do
+                  pgf <- liftIO $ GF.link opts (GF.moduleNameS moduleName , gr)
                   case PGF.inferExpr pgf expr of
                     Left errorMessage -> do
                       debugM logger "reactor.handle" $ "Unable to find type of expr: " ++ show fullWord
