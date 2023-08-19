@@ -44,6 +44,7 @@ import           Language.LSP.Diagnostics
 import           Language.LSP.Logging (defaultClientLogger)
 import qualified Language.LSP.Types            as J
 import qualified Language.LSP.Types.Lens       as J
+import qualified Language.LSP.Types.Lens       as JL
 import           Language.LSP.VFS
 import           System.Exit
 import qualified System.Process as Process
@@ -73,6 +74,8 @@ import qualified Data.List as List
 import Data.Function (on)
 import Data.Ord (comparing)
 import Control.Applicative ((<|>))
+import qualified PGF
+import System.FilePath (takeBaseName)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -227,6 +230,10 @@ reactor logger inp = do
           GF.main
     -- debugM logger "reactor" "Completed request"
 
+-- TODO: Run type checker over hover
+-- TODO: Package for mac
+-- TODO: Find locations (Maybe through tags or some other solution)
+
 -- | Check if we have a handler, and if we create a haskell-lsp handler to pass it as
 -- input into the reactor
 lspHandlers :: L.LogAction (LspM LspContext) (WithSeverity T.Text) -> TChan ReactorInput -> Handlers (LspM LspContext)
@@ -296,8 +303,8 @@ handle logger = mconcat
     debugM logger "reactor.handle" $ "Processing DidChangeTextDocument for: " ++ show doc
     mdoc <- getVirtualFile doc
     case mdoc of
-      Just (VirtualFile _version str _) -> do
-        debugM logger "reactor.handle" $ "Found the virtual file: " ++ show str
+      Just (VirtualFile _version fileVersion _) -> do
+        debugM logger "reactor.handle" $ "Found the virtual file: " ++ show fileVersion
       Nothing -> do
         debugM logger "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
 
@@ -323,14 +330,56 @@ handle logger = mconcat
 
   , requestHandler J.STextDocumentHover $ \req responder -> do
       -- debugM logger "reactor.handle" "Processing a textDocument/hover request"
-      let J.HoverParams doc pos _workDone = req ^. J.params
-          J.Position _l _c' = pos
-          rsp = J.Hover ms (Just range)
-          ms = J.HoverContents $ J.markedUpContent "lsp-hello" "" -- "Your type info here!"
-          range = J.Range pos pos
-          fileName = J.uriToFilePath $ doc ^. J.uri
+      let J.HoverParams docI pos _workDone = req ^. J.params
+          doc = docI ^. J.uri
+          J.Position _l col = pos
+          -- rsp = J.Hover ms (Just range)
+          -- ms = J.HoverContents $ J.markedUpContent "lsp-hello" "" -- "Your type info here!"
+          -- range = J.Range pos pos
+          lineStart = pos {J._character = 0}
+          lineRange = J.Range lineStart (lineStart & JL.line +~ 1 )
+          fileName = J.uriToFilePath $ doc
+      mdoc <- getVirtualFile $ J.toNormalizedUri doc
+      case mdoc of
+        Just vf@(VirtualFile _version fileVersion _) -> do
+          let selectedLine = rangeLinesFromVfs vf lineRange
+          let (prefix, postfix) = T.splitAt (fromIntegral col) selectedLine
+          -- TODO: Use less naive lexer
+          -- TODO: Handle newline!
+          let preWord = T.takeWhileEnd (/= ' ') prefix
+          let postWord = T.takeWhile (/= ' ') postfix
+          let fullWord = preWord <> postWord
+          debugM logger "reactor.handle" $ "Found the virtual file: " ++ show fileVersion
+          debugM logger "reactor.handle" $ "Hovering line: " ++ show selectedLine
+          debugM logger "reactor.handle" $ "For pos: " ++ show pos
+          -- debugM logger "reactor.handle" $ "preWord: " ++ show preWord
+          -- debugM logger "reactor.handle" $ "postWord: " ++ show postWord
+          debugM logger "reactor.handle" $ "Hovering word: " ++ show fullWord
+          let range = J.Range (pos & JL.character -~ fromIntegral (T.length preWord))
+                              (pos & JL.character +~ fromIntegral (T.length postWord))
+          debugM logger "reactor.handle" $ "Guessing range: " ++ show range
+          (gr, modEnv) <- getCompileEnv
+          let opts = GF.modifyFlags $ \flags -> flags
+                { GF.optOutputDir = Just outputDir
+                , GF.optGFODir = Just outputDir
+                , GF.optPMCFG = False
+                , GF.optVerbosity = GF.Quiet
+                -- , GF.optStopAfterPhase = Linker -- Default Compile
+                }
+          -- pgf <- liftIO $ GF.link opts (_ , gr)
+          -- GF.Compile.link converts gr to pgf
+          -- Use verb: Quiet
+          -- foo <- liftIO $ _ $ PGF.inferExpr gr
+          debugM logger "hover.handle" $ "For file named: " ++ show (takeBaseName <$> fileName)
+          debugM logger "hover.handle" $ "Modules available: " ++ show (fst <$> GF.modules gr)
+          let ms = J.HoverContents $ J.markedUpContent "lsp-hello" fullWord
+              rsp = J.Hover ms (Just range)
+          responder (Right $ Just rsp)
+        Nothing -> do
+          debugM logger "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
+          responder (Right Nothing)
       -- callGF logger fileName
-      responder (Right $ Just rsp)
+      -- responder (Right $ Just rsp)
 
   , requestHandler J.STextDocumentDocumentSymbol $ \req responder -> do
       debugM logger "reactor.handle" "Processing a textDocument/documentSymbol request"
