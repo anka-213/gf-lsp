@@ -97,7 +97,6 @@ outputDir = ".gf-lsp"
 
 -- TODO: Generate type lenses for functions
 -- TODO: Show concrete types on hover
--- TODO: Only load abstract pgf
 -- TODO: Don't regenerate pgf for each hover
 
 
@@ -386,7 +385,9 @@ handle logger = mconcat
                   debugM logger "reactor.handle" $ "Invalid expression: " ++ show fullWord
                   responder (Right Nothing)
                 Just expr -> do
-                  pgf <- liftIO $ GF.link opts (GF.moduleNameS moduleName , gr)
+                  -- TODO: Catch stderr and exceptions
+                  absName <- liftIO $ GF.abstractOfConcrete gr $ GF.moduleNameS moduleName
+                  pgf <- liftIO $ GF.link opts (absName , gr)
                   case PGF.inferExpr pgf expr of
                     Left errorMessage -> do
                       debugM logger "reactor.handle" $ "Unable to find type of expr: " ++ show fullWord
