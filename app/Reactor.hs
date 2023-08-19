@@ -354,15 +354,15 @@ handle logger = mconcat
           let preWord = T.takeWhileEnd (/= ' ') prefix
           let postWord = T.takeWhile (/= ' ') postfix
           let fullWord = preWord <> postWord
-          debugM logger "reactor.handle" $ "Found the virtual file: " ++ show fileVersion
-          debugM logger "reactor.handle" $ "Hovering line: " ++ show selectedLine
-          debugM logger "reactor.handle" $ "For pos: " ++ show pos
+          -- debugM logger "reactor.handle" $ "Found the virtual file: " ++ show fileVersion
+          -- debugM logger "reactor.handle" $ "Hovering line: " ++ show selectedLine
+          -- debugM logger "reactor.handle" $ "For pos: " ++ show pos
           -- debugM logger "reactor.handle" $ "preWord: " ++ show preWord
           -- debugM logger "reactor.handle" $ "postWord: " ++ show postWord
           debugM logger "reactor.handle" $ "Hovering word: " ++ show fullWord
           let range = J.Range (pos & JL.character -~ fromIntegral (T.length preWord))
                               (pos & JL.character +~ fromIntegral (T.length postWord))
-          debugM logger "reactor.handle" $ "Guessing range: " ++ show range
+          -- debugM logger "reactor.handle" $ "Guessing range: " ++ show range
           (gr, modEnv) <- getCompileEnv
           let opts = GF.modifyFlags $ \flags -> flags
                 { GF.optOutputDir = Just outputDir
