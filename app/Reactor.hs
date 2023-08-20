@@ -368,29 +368,38 @@ handle logger = mconcat
               -- TODO: Clean this nesting up
               debugM logger "reactor.handle" $ "Didn't find filename for: " ++ show doc
               responder (Right Nothing)
-            Just moduleName -> do
-              debugM logger "hover.handle" $ "For file named: " ++ show moduleName
+            Just modName -> do
+              debugM logger "hover.handle" $ "For file named: " ++ show modName
               let showModuleName (GF.MN x) = GF.showIdent x
               debugM logger "hover.handle" $ "Modules available: " ++ show (showModuleName . fst <$> GF.modules gr)
               -- GF.Compile.link converts gr to pgf
               case PGF.readExpr $ T.unpack fullWord of
                 Nothing -> do
-                  debugM logger "reactor.handle" $ "Invalid expression: " ++ show fullWord
+                  debugM logger "hover.handle" $ "Invalid expression: " ++ show fullWord
                   responder (Right Nothing)
                 Just expr -> do
-                  -- TODO: Catch stderr and exceptions
-                  absName <- liftIO $ GF.abstractOfConcrete gr $ GF.moduleNameS moduleName
-                  pgf <- liftIO $ GF.link opts (absName , gr)
-                  case PGF.inferExpr pgf expr of
-                    Left errorMessage -> do
-                      debugM logger "reactor.handle" $ "Unable to find type of expr: " ++ show fullWord
-                      debugM logger "reactor.handle" $ "Got error: " ++ show (PGF.ppTcError errorMessage)
-                      responder (Right Nothing)
-                    Right (expr', exprType) -> do
-                      let message = PGF.showExpr [] expr' ++ " : " ++ PGF.showType [] exprType
-                      let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack message
-                          rsp = J.Hover ms (Just range)
-                      responder (Right $ Just rsp)
+                  let absName = GF.srcAbsName gr $ GF.moduleNameS modName
+                  debugM logger "hover.handle" "Running linker"
+                  (errOut, (output, r)) <- liftIO $ captureStdErr $ captureStdout $ E.try @SomeException $ GF.tryIOE $ GF.link opts (absName , gr)
+                  debugM logger "hover.handle" "Ran link pgf"
+                  debugM logger "hover.handle" $ "Got stderr: " ++ show errOut
+                  debugM logger "hover.handle" $ "Got stdout: " ++ show output
+                  case r of
+                    Left exc -> do
+                      errorM logger "reactor.handle.hover" $ "Got exception from GF: " ++ show exc
+                    Right (GF.Bad err) -> do
+                      errorM logger "reactor.handle.hover" $ "Linking failed with: " ++ show err
+                    Right (GF.Ok pgf) -> do
+                      case PGF.inferExpr pgf expr of
+                        Left errorMessage -> do
+                          debugM logger "reactor.handle" $ "Unable to find type of expr: " ++ show fullWord
+                          debugM logger "reactor.handle" $ "Got error: " ++ show (PGF.ppTcError errorMessage)
+                          responder (Right Nothing)
+                        Right (expr', exprType) -> do
+                          let message = PGF.showExpr [] expr' ++ " : " ++ PGF.showType [] exprType
+                          let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack message
+                              rsp = J.Hover ms (Just range)
+                          responder (Right $ Just rsp)
         Nothing -> do
           debugM logger "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
           responder (Right Nothing)
