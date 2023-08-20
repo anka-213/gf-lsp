@@ -79,6 +79,8 @@ import qualified PGF
 import System.FilePath (takeBaseName)
 import Control.Exception (SomeException(SomeException))
 import Data.Typeable (typeRep, typeOf)
+import qualified Data.Map as Map
+import GFTags (Tags, Tag (..))
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -263,6 +265,13 @@ handle ::  L.LogAction (LspM LspContext) (WithSeverity T.Text) -> Handlers (LspM
 handle logger = mconcat
   [ notificationHandler J.SInitialized $ \_msg -> do
       debugM logger "reactor.handle" "Processing the Initialized notification"
+      -- foo <- registerCapability J.STextDocumentDefinition (J.DefinitionRegistrationOptions Nothing Nothing) $ \req responder -> do
+      --   -- let J.DefinitionParams {J._textDocument = doc, J._position = pos} = req
+      --   -- let doc = req ^. J.params . J.textDocument
+      --   -- let pos = req ^. J.params . J.position
+      --   debugM logger "def" $ "Got request: " ++ show req
+      --   responder $ Right $ J.InR $ J.InL $ J.List []
+      pure ()
 
       -- -- We're initialized! Lets send a showMessageRequest now
       -- let params = J.ShowMessageRequestParams
@@ -341,31 +350,10 @@ handle logger = mconcat
       -- debugM logger "reactor.handle" "Processing a textDocument/hover request"
       let J.HoverParams docI pos _workDone = req ^. J.params
           doc = docI ^. J.uri
-          J.Position _l col = pos
-          -- rsp = J.Hover ms (Just range)
-          -- ms = J.HoverContents $ J.markedUpContent "lsp-hello" "" -- "Your type info here!"
-          -- range = J.Range pos pos
-          lineStart = pos {J._character = 0}
-          lineRange = J.Range lineStart (lineStart & JL.line +~ 1 )
-          fileName = J.uriToFilePath $ doc
-      mdoc <- getVirtualFile $ J.toNormalizedUri doc
-      case mdoc of
-        Just vf@(VirtualFile _version fileVersion _) -> do
-          let selectedLine = rangeLinesFromVfs vf lineRange
-          let (prefix, postfix) = T.splitAt (fromIntegral col) selectedLine
-          -- TODO: Use less naive lexer
-          -- TODO: Handle newline!
-          let preWord = T.takeWhileEnd (/= ' ') prefix
-          let postWord = T.takeWhile (/= ' ') postfix
-          let fullWord = preWord <> postWord
-          -- debugM logger "reactor.handle" $ "Found the virtual file: " ++ show fileVersion
-          -- debugM logger "reactor.handle" $ "Hovering line: " ++ show selectedLine
-          -- debugM logger "reactor.handle" $ "For pos: " ++ show pos
-          -- debugM logger "reactor.handle" $ "preWord: " ++ show preWord
-          -- debugM logger "reactor.handle" $ "postWord: " ++ show postWord
-          debugM logger "reactor.handle" $ "Hovering word: " ++ show fullWord
-          let range = J.Range (pos & JL.character -~ fromIntegral (T.length preWord))
-                              (pos & JL.character +~ fromIntegral (T.length postWord))
+          fileName = J.uriToFilePath doc
+      hovStr <- getHoverString logger pos doc
+      case hovStr of
+        Just (fullWord, range) -> do
           -- debugM logger "reactor.handle" $ "Guessing range: " ++ show range
           (tags, gr, modEnv) <- getCompileEnv
           let opts = GF.modifyFlags $ \flags -> flags
@@ -382,7 +370,8 @@ handle logger = mconcat
               responder (Right Nothing)
             Just moduleName -> do
               debugM logger "hover.handle" $ "For file named: " ++ show moduleName
-              debugM logger "hover.handle" $ "Modules available: " ++ show (fst <$> GF.modules gr)
+              let showModuleName (GF.MN x) = GF.showIdent x
+              debugM logger "hover.handle" $ "Modules available: " ++ show (showModuleName . fst <$> GF.modules gr)
               -- GF.Compile.link converts gr to pgf
               case PGF.readExpr $ T.unpack fullWord of
                 Nothing -> do
@@ -449,7 +438,110 @@ handle logger = mconcat
         forM [0..10] $ \i -> do
           update (ProgressAmount (Just (i * 10)) (Just "Doing stuff"))
           liftIO $ threadDelay (1 * 1000000)
+  , requestHandler J.STextDocumentDefinition $ \req responder -> do
+      -- let J.DefinitionParams {J._textDocument = doc, J._position = pos} = req
+      let doc = req ^. J.params . J.textDocument . J.uri
+      let pos = req ^. J.params . J.position
+      debugM logger "def" $ "Got request: " ++ show req
+      let fileName = J.uriToFilePath doc
+      hovStr <- getHoverString logger pos doc
+      case hovStr of
+        Nothing -> do
+          warningM logger "def" $ "Didn't find string for: " ++ show pos
+          responder $ Right $ J.InR $ J.InL $ J.List []
+        Just (fullWord, _range) -> do
+          debugM logger "def" $ "Found word: " ++ show fullWord
+          -- debugM logger "reactor.handle" $ "Guessing range: " ++ show range
+          (tags, gr, modEnv) <- getCompileEnv
+          let opts = GF.modifyFlags $ \flags -> flags
+                { GF.optOutputDir = Just outputDir
+                , GF.optGFODir = Just outputDir
+                , GF.optPMCFG = False
+                , GF.optVerbosity = GF.Quiet
+                -- , GF.optStopAfterPhase = Linker -- Default Compile
+                }
+          case takeBaseName <$> fileName of
+            Nothing -> do
+              -- TODO: Clean this nesting up
+              debugM logger "reactor.handle" $ "Didn't find filename for: " ++ show doc
+              responder $ Right $ J.InR $ J.InL $ J.List []
+            Just modName -> do
+              debugM logger "hover.handle" $ "For file named: " ++ show modName
+              mtag <- findTagsForIdentDeep logger (GF.moduleNameS modName) (GF.identS $ T.unpack fullWord) tags
+              case mtag of
+                Nothing -> do
+                  warningM logger "reactor.handle" "Failed to find tag"
+                  -- Warning already handled
+                  responder $ Right $ J.InR $ J.InL $ J.List []
+                Just (LocalTag _ident _kind (fil,GF.Local l c) _typ) -> do
+                  let defPos = mkPos l c :: J.Position
+                  let uri = J.filePathToUri fil :: J.Uri
+                  responder $ Right $ J.InL $ J.Location uri (J.Range defPos defPos)
+                Just otherTag ->
+                  responder $ Left $ J.ResponseError J.InternalError ("IMPOSSIBLE: " <> T.pack (show otherTag)) Nothing
+              -- pure ()
+              -- responder
+      -- responder $ Left $ _
   ]
+
+-- findTagsForIdentDeep :: GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> ExceptT String (LspM LspContext) ()
+findTagsForIdentDeep :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
+  -> GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> LspM LspContext (Maybe Tag)
+findTagsForIdentDeep logger mNm ident tags = do
+  case findTagsForIdent mNm ident tags of
+    Left warn -> do
+      warningM logger "reactor.handle" warn
+      pure Nothing
+    Right tag ->
+      case tag of
+        LocalTag _ident _kind _loc _typ -> pure $ Just  tag
+        ImportedTag _ident mNm' _al _fil -> do
+          debugM logger "findTags" $ "Found imported tag: " ++ show tag
+          findTagsForIdentDeep logger mNm' ident tags
+
+
+        -- pure $ Just tag
+findTagsForIdent :: GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> Either String Tag
+findTagsForIdent modName ident tags = do
+    mtags <- case Map.lookup modName tags of
+      Nothing -> Left $ "Didn't find tags for module: " ++ show modName
+      Just mtags -> pure mtags
+    case Map.lookup ident mtags of
+      Nothing -> do
+        Left $ "Didn't find tags for ident: " ++ show ident ++ " in module " ++ show modName
+      Just tag -> do pure tag
+    -- -- debugM logger "reactor.handle" $ "Found tags for ident: " ++ show tag
+    -- pure tag
+
+getHoverString :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
+  -> J.Position
+  -> J.Uri
+  -> LspT LspContext IO (Maybe (T.Text, J.Range))
+getHoverString logger pos doc = do
+      let J.Position _l col = pos
+          -- rsp = J.Hover ms (Just range)
+          -- ms = J.HoverContents $ J.markedUpContent "lsp-hello" "" -- "Your type info here!"
+          -- range = J.Range pos pos
+          lineStart = pos {J._character = 0}
+          lineRange = J.Range lineStart (lineStart & JL.line +~ 1 )
+          -- fileName = J.uriToFilePath $ doc
+      mdoc <- getVirtualFile $ J.toNormalizedUri doc
+      case mdoc of
+        Nothing -> do
+          debugM logger "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
+          pure Nothing
+        Just vf@(VirtualFile _version _fileVersion _) -> do
+          let selectedLine = rangeLinesFromVfs vf lineRange
+          let (prefix, postfix) = T.splitAt (fromIntegral col) selectedLine
+          -- TODO: Use less naive lexer
+          -- TODO: Handle newline!
+          let preWord = T.takeWhileEnd (/= ' ') prefix
+          let postWord = T.takeWhile (/= ' ') postfix
+          let fullWord = preWord <> postWord
+          debugM logger "reactor.handle" $ "Hovering word: " ++ show fullWord
+          let range = J.Range (pos & JL.character -~ fromIntegral (T.length preWord))
+                              (pos & JL.character +~ fromIntegral (T.length postWord))
+          pure $ Just (fullWord, range)
 
 callGF :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> J.Uri -> Maybe FilePath -> LspM LspContext ()
 callGF logger _ Nothing = do
@@ -669,6 +761,12 @@ parseErrorMessage msg = case lines msg of
     _ -> Nothing
   _ -> Nothing
 
+-- | Convert 1-indexed pos to 0-indexed pos
+mkPos :: Int -> Int -> J.Position
+mkPos l c = J.Position l' c'
+  where
+    l' = fromIntegral $ l - 1
+    c' = fromIntegral $ c - 1
 mkRange :: J.UInt -> J.UInt -> J.UInt -> J.UInt -> J.Range
 mkRange l1 c1 l2 c2 = J.Range (J.Position l1' c1') (J.Position l2' c2')
   where

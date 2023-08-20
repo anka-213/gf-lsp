@@ -23,11 +23,11 @@ data Tag
        { identifier :: Ident
        , kind :: String
        , location :: FileLocation
-       , typeOf :: String
+       , gfTypeOf :: String
        }
     | ImportedTag
        { identifier :: Ident
-       , moduleName :: String
+       , moduleName :: ModuleName
        , moduleAlias :: String
        , tagFileName :: String
        }
@@ -43,6 +43,7 @@ calculateTags opts gr mo =
       txt     = Map.fromList $ map (\x -> (identifier x, x)) $ imports++locals
   in txt
 
+-- TODO: Don't destruct map just to reconstruct the same map
 getLocalTags :: (ModuleName, ModuleInfo) -> [Tag]
 getLocalTags (m,mi) =
   -- foldMap (_ . getLocations . snd) $ Map.toList (jments mi)
@@ -90,11 +91,11 @@ getImports opts gr mo@(m,mi) = concatMap toDep allOpens
 
     toDep (OSimple m,incl)     =
       let Ok mi = lookupModule gr m
-      in [ImportedTag id (render m) "" $ gf2mygftags opts (orig mi info)
+      in [ImportedTag id m "" $ gf2mygftags opts (orig mi info)
             | (id,info) <- Map.toList (jments mi), filter incl id]
     toDep (OQualif m1 m2,incl) =
       let Ok mi = lookupModule gr m2
-      in [ImportedTag id (render m2) (render m1) $ gf2mygftags opts (orig mi info)
+      in [ImportedTag id m2 (render m1) $ gf2mygftags opts (orig mi info)
             | (id,info) <- Map.toList (jments mi), filter incl id]
 
     filter MIAll          id = True
