@@ -398,7 +398,21 @@ handle logger = mconcat
                         Left errorMessage -> do
                           debugM logger "reactor.handle" $ "Unable to find type of expr: " ++ show fullWord
                           debugM logger "reactor.handle" $ "Got error: " ++ show (PGF.ppTcError errorMessage)
-                          responder (Right Nothing)
+                          debugM logger "definition.handle" $ "For file named: " ++ show modName
+                          mtag <- findTagsForIdentDeep logger (GF.moduleNameS modName) (GF.identS $ T.unpack fullWord) tags
+                          case mtag of
+                            Nothing -> do
+                              warningM logger "reactor.handle" "Failed to find tag"
+                              -- Warning already handled
+                              responder (Right Nothing)
+                            Just tag@(LocalTag _ident _kind _filLoc typ) -> do
+                              warningM logger "reactor.handle" $ "Found tag: " ++ show tag
+                              let message = PGF.showExpr [] expr ++ " : " ++ typ
+                              let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack message
+                                  rsp = J.Hover ms (Just range)
+                              responder $ Right $ Just rsp
+                            Just otherTag@ImportedTag{} -> do
+                              responder $ Left $ J.ResponseError J.InternalError ("IMPOSSIBLE: " <> T.pack (show otherTag)) Nothing
                         Right (expr', exprType) -> do
                           let message = PGF.showExpr [] expr' ++ " : " ++ PGF.showType [] exprType
                           let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack message
@@ -484,7 +498,7 @@ handle logger = mconcat
                   let getLoc fil0 tag0 = case tag0 of
                         GF.Local l c -> pure (fil0, l,c)
                         GF.NoLoc -> do
-                          warningM logger "definition.handle" $ "No location found"
+                          warningM logger "definition.handle" "No location found"
                           pure (fil0, 0,0)
                         GF.External fil' tag' -> do
                           debugM logger "definition.handle" $ "Found external loc: " ++ show fil'
