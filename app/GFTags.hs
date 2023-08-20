@@ -23,7 +23,7 @@ data Tag
        { identifier :: Ident
        , kind :: String
        , location :: FileLocation
-       , gfTypeOf :: String
+       , gfTypeOf :: Maybe String
        }
     | ImportedTag
        { identifier :: Ident
@@ -34,24 +34,24 @@ data Tag
     deriving (Show, Eq, Ord)
 
 -- From GF.Compile.Tags
-type Tags = Map.Map Ident Tag
+type Tags = Map.Map Ident [Tag]
 
-calculateTags :: Options -> Grammar -> (ModuleName, ModuleInfo) -> Map.Map Ident Tag
+calculateTags :: Options -> Grammar -> (ModuleName, ModuleInfo) -> Map.Map Ident [Tag]
 calculateTags opts gr mo =
-  let imports = getImports opts gr mo
+  let imports = Map.fromListWith (++) $ map (\x -> (identifier x, [x]))  $ getImports opts gr mo
       locals  = getLocalTags mo
-      txt     = Map.fromList $ map (\x -> (identifier x, x)) $ imports++locals
+      txt     = Map.unionWith (++) imports locals
   in txt
 
 -- TODO: Don't destruct map just to reconstruct the same map
-getLocalTags :: (ModuleName, ModuleInfo) -> [Tag]
+getLocalTags :: (ModuleName, ModuleInfo) -> Tags
 getLocalTags (m,mi) =
   -- foldMap (_ . getLocations . snd) $ Map.toList (jments mi)
-  [LocalTag i k l t
-       | (i,jment) <- Map.toList (jments mi),
-         (k,l,t)   <- getLocations jment]
+  flip Map.mapWithKey (jments mi) $ \i jment ->
+       [ LocalTag i k l t
+       | (k,l,t)   <- getLocations jment]
   where
-    getLocations :: Info -> [] (String,FileLocation,String)
+    getLocations :: Info -> [] (String,FileLocation,Maybe String)
     getLocations (AbsCat mb_ctxt)               = maybe (loc "cat")          mb_ctxt
     getLocations (AbsFun mb_type _ mb_eqs _)    = maybe (ltype "fun")        mb_type <>
                                                   maybe (list (loc "def"))   mb_eqs
@@ -69,9 +69,9 @@ getLocalTags (m,mi) =
                                                   maybe (loc "printname")    mprn
     getLocations _                              = mempty
 
-    loc kind (L loc _) = singleton (kind,(msrc mi, loc),"")
+    loc kind (L loc _) = singleton (kind,(msrc mi, loc), Nothing)
 
-    ltype kind (L loc ty) = singleton (kind,(msrc mi, loc),render (ppTerm Unqualified 0 ty))
+    ltype kind (L loc ty) = singleton (kind,(msrc mi, loc),Just $ render (ppTerm Unqualified 0 ty))
 
     -- maybe f (Just x) = f x
     -- maybe f Nothing  = mempty

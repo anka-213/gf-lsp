@@ -400,19 +400,18 @@ handle logger = mconcat
                           debugM logger "reactor.handle" $ "Got error: " ++ show (PGF.ppTcError errorMessage)
                           debugM logger "definition.handle" $ "For file named: " ++ show modName
                           mtag <- findTagsForIdentDeep logger (GF.moduleNameS modName) (GF.identS $ T.unpack fullWord) tags
-                          case mtag of
-                            Nothing -> do
+                          let typeTags = [ (typ, tag) | tag@LocalTag {gfTypeOf=Just typ} <- mtag ]
+                          case typeTags of
+                            [] -> do
                               warningM logger "reactor.handle" "Failed to find tag"
                               -- Warning already handled
                               responder (Right Nothing)
-                            Just tag@(LocalTag _ident _kind _filLoc typ) -> do
-                              warningM logger "reactor.handle" $ "Found tag: " ++ show tag
-                              let message = PGF.showExpr [] expr ++ " : " ++ typ
-                              let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack message
+                            _ -> do
+                              debugM logger "reactor.handle" $ "Found tags: " ++ show (map snd typeTags)
+                              let message = [PGF.showExpr [] expr ++ " : " ++ typ | (typ, _) <- typeTags ]
+                              let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack $ unlines message
                                   rsp = J.Hover ms (Just range)
                               responder $ Right $ Just rsp
-                            Just otherTag@ImportedTag{} -> do
-                              responder $ Left $ J.ResponseError J.InternalError ("IMPOSSIBLE: " <> T.pack (show otherTag)) Nothing
                         Right (expr', exprType) -> do
                           let message = PGF.showExpr [] expr' ++ " : " ++ PGF.showType [] exprType
                           let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack message
@@ -488,13 +487,13 @@ handle logger = mconcat
             Just modName -> do
               debugM logger "definition.handle" $ "For file named: " ++ show modName
               mtag <- findTagsForIdentDeep logger (GF.moduleNameS modName) (GF.identS $ T.unpack fullWord) tags
-              case mtag of
-                Nothing -> do
+              debugM logger "definition.handle" $ "Found tags: " ++ show mtag
+              case map location mtag of
+                [] -> do
                   warningM logger "reactor.handle" "Failed to find tag"
                   -- Warning already handled
                   responder $ Right $ J.InR $ J.InL $ J.List []
-                Just (LocalTag _ident _kind (fil,tag) _typ) -> do
-                  debugM logger "definition.handle" $ "Initial file loc: " ++ show fil
+                tagThings -> do
                   let getLoc fil0 tag0 = case tag0 of
                         GF.Local l c -> pure (fil0, l,c)
                         GF.NoLoc -> do
@@ -503,35 +502,35 @@ handle logger = mconcat
                         GF.External fil' tag' -> do
                           debugM logger "definition.handle" $ "Found external loc: " ++ show fil'
                           getLoc fil' tag'
-                  (fil', l,c) <- getLoc fil tag
-                  let defPos = mkPos l c :: J.Position
-                  let uri = J.filePathToUri fil' :: J.Uri
-                  responder $ Right $ J.InL $ J.Location uri (J.Range defPos defPos)
-                Just otherTag@ImportedTag {} ->
-                  responder $ Left $ J.ResponseError J.InternalError ("IMPOSSIBLE: " <> T.pack (show otherTag)) Nothing
-              -- pure ()
-              -- responder
-      -- responder $ Left $ _
+                  allLocs <- forM tagThings $ \(fil,tag) -> do
+                    debugM logger "definition.handle" $ "Initial file loc: " ++ show fil
+                    (fil', l,c) <- getLoc fil tag
+                    let defPos = mkPos l c :: J.Position
+                    let uri = J.filePathToUri fil' :: J.Uri
+                    pure $ J.Location uri (J.Range defPos defPos)
+                  responder $ Right $ J.InR $ J.InL $ J.List $ allLocs
   ]
 
 -- findTagsForIdentDeep :: GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> ExceptT String (LspM LspContext) ()
 findTagsForIdentDeep :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
-  -> GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> LspM LspContext (Maybe Tag)
+  -> GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> LspM LspContext [Tag]
 findTagsForIdentDeep logger mNm ident tags = do
   case findTagsForIdent mNm ident tags of
     Left warn -> do
       warningM logger "reactor.handle" warn
-      pure Nothing
-    Right tag ->
-      case tag of
-        LocalTag _ident _kind _loc _typ -> pure $ Just  tag
-        ImportedTag _ident mNm' _al _fil -> do
-          debugM logger "findTags" $ "Found imported tag: " ++ show tag
-          findTagsForIdentDeep logger mNm' ident tags
+      pure []
+    Right tagsHere -> do
+      res <- forM tagsHere $ \tag -> do
+        case head tagsHere of
+          LocalTag _ident _kind _loc _typ -> pure [tag]
+          ImportedTag _ident mNm' _al _fil -> do
+            debugM logger "findTags" $ "Found imported tag: " ++ show tag
+            findTagsForIdentDeep logger mNm' ident tags
+      pure $ concat res
 
 
         -- pure $ Just tag
-findTagsForIdent :: GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> Either String Tag
+findTagsForIdent :: GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> Either String [Tag]
 findTagsForIdent modName ident tags = do
     mtags <- case Map.lookup modName tags of
       Nothing -> Left $ "Didn't find tags for module: " ++ show modName
