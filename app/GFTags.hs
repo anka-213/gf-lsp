@@ -70,7 +70,7 @@ getLocalTags (m,mi) =
 
     loc kind (L loc _) = singleton (kind,(msrc mi, loc), Nothing)
 
-    ltype kind (L loc ty) = singleton (kind,(msrc mi, loc),Just $ render (ppTerm Unqualified 0 ty))
+    ltype kind (L loc ty) = singleton (kind,(msrc mi, loc),Just $ render (ppTerm Terse 0 ty))
 
     -- maybe f (Just x) = f x
     -- maybe f Nothing  = mempty
