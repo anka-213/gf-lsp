@@ -104,6 +104,7 @@ outputDir = ".gf-lsp"
 -- TODO: Show concrete types on hover
 -- TODO: Don't regenerate pgf for each hover
 -- TODO: Write tests
+-- TODO: Figure out why compilation of this is slow
 
 
 -- ---------------------------------------------------------------------
