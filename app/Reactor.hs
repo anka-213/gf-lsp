@@ -9,6 +9,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -Wno-unticked-promoted-constructors #-}
+{-# LANGUAGE TypeApplications #-}
 
 {- |
 This is an example language server built with haskell-lsp using a 'Reactor'
@@ -76,6 +77,8 @@ import Data.Ord (comparing)
 import Control.Applicative ((<|>))
 import qualified PGF
 import System.FilePath (takeBaseName)
+import Control.Exception (SomeException(SomeException))
+import Data.Typeable (typeRep, typeOf)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -98,6 +101,7 @@ outputDir = ".gf-lsp"
 -- TODO: Generate type lenses for functions
 -- TODO: Show concrete types on hover
 -- TODO: Don't regenerate pgf for each hover
+-- TODO: Write tests
 
 
 -- ---------------------------------------------------------------------
@@ -477,7 +481,7 @@ callGF logger doc (Just filename) = do
 
   -- Change term to prevent GF from outputting colors
   liftIO $ setEnv "TERM" ""
-  (errOut, (output, r)) <- liftIO $ captureStdErr $ captureStdout $ GF.tryIOE $ compileModule opts cEnv filename
+  (errOut, (output, r)) <- liftIO $ captureStdErr $ captureStdout $ E.try @SomeException $ GF.tryIOE $ compileModule opts cEnv filename
   debugM logger "reactor.handle" "Ran GF"
   debugM logger "reactor.handle" $ "Got stderr: " ++ show errOut
   debugM logger "reactor.handle" $ "Got stdout: " ++ show output
@@ -526,9 +530,13 @@ groupByFst :: Ord a => [(a, b)] -> [(a, [b])]
 groupByFst = map (\xs -> (fst (head xs), map snd xs)) . List.groupBy ((==) `on` fst) . List.sortBy (comparing fst)
 
 mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
-  -> GF.Options -> J.Uri -> IndentForest -> GF.Err CompileEnv
+  -> GF.Options -> J.Uri -> IndentForest -> Either SomeException (GF.Err CompileEnv)
   -> LspT LspContext IO ()
-mkDiagnostics logger _ _doc warningForest (GF.Ok x) = do
+mkDiagnostics logger _opts _doc _warnings (Left (SomeException inner)) = do
+  warningM logger "gf-compiler" $ "Got error of type " ++ show (typeOf inner)
+  errorM logger "gf-compiler" $ "" ++ show (E.displayException inner)
+  pure ()
+mkDiagnostics logger _ _doc warningForest (Right (GF.Ok x)) = do
   setCompileEnv x
   let parsedWarnings = parseWarnings =<< warningForest
   if null parsedWarnings
@@ -553,9 +561,9 @@ mkDiagnostics logger _ _doc warningForest (GF.Ok x) = do
           publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
         _ -> warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
   pure ()
-mkDiagnostics logger _opts doc _warnings (GF.Bad msg) = do
+mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
 
-  warningM logger "reactor.handle" $ "Got error:\n" <> T.pack msg
+  warningM logger "reactor.handle" $ "Got error:\n" <> msg
 
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
@@ -733,11 +741,11 @@ testCase2 = "grammars/QuestionsEng.gf:\n   grammars/QuestionsEng.gf:35:\n     Ha
 debugM ::LogAction m (WithSeverity T.Text) -> T.Text -> String -> m ()
 debugM logger tag message = logger <& (tag <> ": " <> T.pack message) `WithSeverity` Info
 
-warningM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
-warningM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Warning
+warningM ::LogAction m (WithSeverity T.Text) -> T.Text -> String -> m ()
+warningM logger tag message = logger <& (tag <> ": " <> T.pack message) `WithSeverity` Warning
 
-errorM ::LogAction m (WithSeverity T.Text) -> T.Text -> T.Text -> m ()
-errorM logger tag message = logger <& (tag <> ": " <> message) `WithSeverity` Error
+errorM ::LogAction m (WithSeverity T.Text) -> T.Text -> String -> m ()
+errorM logger tag message = logger <& (tag <> ": " <> T.pack message) `WithSeverity` Error
 
 captureStdErr :: IO a -> IO (String, a)
 captureStdErr = captureHandleString stderr
