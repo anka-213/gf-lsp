@@ -487,7 +487,8 @@ handle logger = mconcat
             Just modName -> do
               debugM logger "definition.handle" $ "For file named: " ++ show modName
               mtag <- findTagsForIdentDeep logger (GF.moduleNameS modName) (GF.identS $ T.unpack fullWord) tags
-              debugM logger "definition.handle" $ "Found tags: " ++ show mtag
+              -- debugM logger "definition.handle" $ "Found tags: " ++ show mtag
+              forM_ mtag $ \tag -> debugM logger "definition.handle" $ "Found tags: " ++ show tag
               case map location mtag of
                 [] -> do
                   warningM logger "reactor.handle" "Failed to find tag"
@@ -502,13 +503,13 @@ handle logger = mconcat
                         GF.External fil' tag' -> do
                           debugM logger "definition.handle" $ "Found external loc: " ++ show fil'
                           getLoc fil' tag'
-                  allLocs <- forM tagThings $ \(fil,tag) -> do
+                  allLocs <- forM tagThings $ \(fil,loc) -> do
                     debugM logger "definition.handle" $ "Initial file loc: " ++ show fil
-                    (fil', l,c) <- getLoc fil tag
+                    (fil', l,c) <- getLoc fil loc
                     let defPos = mkPos l c :: J.Position
                     let uri = J.filePathToUri fil' :: J.Uri
                     pure $ J.Location uri (J.Range defPos defPos)
-                  responder $ Right $ J.InR $ J.InL $ J.List $ allLocs
+                  responder $ Right $ J.InR $ J.InL $ J.List allLocs
   ]
 
 -- findTagsForIdentDeep :: GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> ExceptT String (LspM LspContext) ()
