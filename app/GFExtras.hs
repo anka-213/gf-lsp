@@ -5,15 +5,15 @@ module GFExtras where
 import GF.Compile.GrammarToPGF(mkCanon2pgf)
 import GF.Compile.ReadFiles(ModEnv,getOptionsFromFile,getAllFiles,
                             importsOfModule)
-import GF.CompileOne(compileOne)
+import GF.CompileOne(compileOne, OneOutput)
 
 import GF.Grammar.Grammar(Grammar,emptyGrammar,
-                          abstractOfConcrete,prependModule)--,msrc,modules
+                          abstractOfConcrete,prependModule, Module)--,msrc,modules
 
 import GF.Infra.Ident(ModuleName,moduleNameS)--,showIdent
 import GF.Infra.Option
 import GF.Infra.UseIO(IOE,FullPath,liftIO,getLibraryDirectory,putIfVerb,
-                      justModuleName,extendPathEnv,putStrE,putPointE)
+                      justModuleName,extendPathEnv,putStrE,putPointE, Output (ePutStrLn))
 import GF.Data.Operations(raise,(+++),err)
 
 import Control.Monad(foldM,when,(<=<),filterM,liftM)
@@ -26,6 +26,7 @@ import GF.Text.Pretty(render,($$),(<+>),nest)
 
 import PGF.Internal(optimizePGF)
 import PGF(PGF,defaultProbabilities,setProbabilities,readProbabilitiesFromFile)
+import GFTags
 
 {-
 -- to compile a set of modules, e.g. an old GF or a .cf file
@@ -82,11 +83,16 @@ compileModule opts1 env@(_,rfs) file =
                else raise (render ("File" <+> file <+> "does not exist"))
 
 compileOne' :: Options -> CompileEnv -> FullPath -> IOE CompileEnv
-compileOne' opts env@(gr,_) = extendCompileEnv env <=< compileOne opts gr
+compileOne' opts env@(gr,_) = extendCompileEnv env <=< writeTagFile opts env <=< compileOne opts gr
+
+writeTagFile :: Options -> CompileEnv -> OneOutput -> IO OneOutput
+writeTagFile opts env@(srcgr, _) input@(Nothing,modl) = ePutStrLn "No filename" >> pure input
+writeTagFile opts env@(srcgr, _) input@(Just file,modl) = ePutStrLn ("Writing tags for: " ++ file) >> input <$ writeMyTags opts srcgr (gf2mygftags opts file) modl
 
 -- auxiliaries
 
 -- | The environment
+
 type CompileEnv = (Grammar,ModEnv)
 
 emptyCompileEnv :: CompileEnv

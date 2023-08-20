@@ -3,7 +3,7 @@ let
   sources = import ./nix/sources.nix;
   pkgs = import sources.nixpkgs { inherit system; };
 
-  gitignore = pkgs.nix-gitignore.gitignoreSourcePure [ ".github\n.git\n" ./.nixignore ./.gitignore ]; # ./.git/info/exclude
+  gitignore = pkgs.nix-gitignore.gitignoreSourcePure [ "nix\n*.nix\n.github\n.git\n" ./.nixignore ./.gitignore ]; # ./.git/info/exclude
 
   hlib = pkgs.haskell.lib;
   myHaskellPackages = pkgs.haskell.packages.${compiler}.override {
@@ -74,6 +74,9 @@ let
 
   docker = pkgs.dockerTools.buildImage {
     name = "gf-lsp";
+    # runAsRoot = ''
+    #   mkdir /tmp
+    # '';
     config.Cmd = [ "${exe}/bin/gf-lsp" ];
   };
 in

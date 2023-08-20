@@ -732,6 +732,10 @@ testCase = "src/swedish/MorphoSwe.gf:31-40:\n  Happened in the renaming of ptPre
 testCase2 :: String
 testCase2 = "grammars/QuestionsEng.gf:\n   grammars/QuestionsEng.gf:35:\n     Happened in linearization of MkPred1\n      unknown label cxn in\n        {atype : AType;\n         cn : {s : Number => Case => Str; g : Gender; lock_CN : {}};\n         n2 : {s : Number => Case => Str; c2 : Str; g : Gender;\n               lock_N2 : {}};\n         v : {s : Order => Agr => {fin : Str; inf : Str}; lock_VPS : {}};\n         v2 : {s : Order => Agr => {fin : Str; inf : Str}; c2 : Str;\n               lock_VPS2 : {}}}"
 
+-- Should search for "mkA = overloaded"
+testCase3 :: String
+testCase3 = "ParadigmsYrl.gf:\n   ParadigmsYrl.gf:\n     Happened in overloading mkA\n      missing record fields: s, c, v type of ss s\n      expected: {s : ResYrl.PsorForm => Str; c : ResYrl.VClass;\n                 lock_A : {}; v : ResYrl.Verbal}\n      inferred: {s : Str}\n      "
+
 -- split :: Eq a => a -> [a] -> [[a]]
 -- split d [] = []
 -- split d s = x : split d (drop 1 y) where (x,y) = span (/= d) s
