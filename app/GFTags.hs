@@ -10,8 +10,9 @@ import GF.Grammar
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 --import Control.Monad
-import GF.Text.Pretty
+import GF.Text.Pretty hiding ((<>))
 import System.FilePath
+import Data.Monoid (Endo (Endo))
 
 -- ---------------------------
 
@@ -45,36 +46,37 @@ getLocalTags :: [Tag] -> (ModuleName, ModuleInfo) -> [Tag]
 getLocalTags x (m,mi) =
   [LocalTag (showIdent i) k l t
        | (i,jment) <- Map.toList (jments mi),
-         (k,l,t)   <- getLocations jment] ++ x
+         (k,l,t)   <- dlToList $ getLocations jment] <> x
   where
-    getLocations :: Info -> [(String,FileLocation,String)]
+    getLocations :: Info -> DList (String,FileLocation,String)
     getLocations (AbsCat mb_ctxt)               = maybe (loc "cat")          mb_ctxt
-    getLocations (AbsFun mb_type _ mb_eqs _)    = maybe (ltype "fun")        mb_type ++
+    getLocations (AbsFun mb_type _ mb_eqs _)    = maybe (ltype "fun")        mb_type <>
                                                   maybe (list (loc "def"))   mb_eqs
     getLocations (ResParam mb_params _)         = maybe (loc "param")        mb_params
-    getLocations (ResValue mb_type)             = ltype "param-value"          mb_type
-    getLocations (ResOper  mb_type mb_def)      = maybe (ltype "oper-type")  mb_type ++
+    getLocations (ResValue mb_type)             = ltype "param-value"        mb_type
+    getLocations (ResOper  mb_type mb_def)      = maybe (ltype "oper-type")  mb_type <>
                                                   maybe (loc "oper-def")     mb_def
-    getLocations (ResOverload _ defs)           = list (\(x,y) -> ltype "overload-type" x ++
+    getLocations (ResOverload _ defs)           = list (\(x,y) -> ltype "overload-type" x <>
                                                                   loc   "overload-def"  y) defs
-    getLocations (CncCat mty md mr mprn _)      = maybe (loc "lincat")       mty ++
-                                                  maybe (loc "lindef")       md  ++
-                                                  maybe (loc "linref")       mr  ++
+    getLocations (CncCat mty md mr mprn _)      = maybe (loc "lincat")       mty <>
+                                                  maybe (loc "lindef")       md  <>
+                                                  maybe (loc "linref")       mr  <>
                                                   maybe (loc "printname")    mprn
-    getLocations (CncFun _ mlin mprn _)         = maybe (loc "lin")          mlin ++
+    getLocations (CncFun _ mlin mprn _)         = maybe (loc "lin")          mlin <>
                                                   maybe (loc "printname")    mprn
-    getLocations _                              = []
+    getLocations _                              = mempty
 
-    loc kind (L loc _) = [(kind,(msrc mi, loc),"")]
+    loc kind (L loc _) = dlSingle (kind,(msrc mi, loc),"")
 
-    ltype kind (L loc ty) = [(kind,(msrc mi, loc),render (ppTerm Unqualified 0 ty))]
+    ltype kind (L loc ty) = dlSingle (kind,(msrc mi, loc),render (ppTerm Unqualified 0 ty))
 
-    maybe f (Just x) = f x
-    maybe f Nothing  = []
-
-    list f xs = concatMap f xs
+    -- maybe f (Just x) = f x
+    -- maybe f Nothing  = mempty
+    maybe = foldMap
 
     render = renderStyle style{mode=OneLineMode}
+
+    list = foldMap
 
 
 getImports :: Options -> Grammar -> (ModuleName, ModuleInfo) -> [Tag]
@@ -109,3 +111,14 @@ gf2mygftags :: Options -> FilePath -> FilePath
 gf2mygftags opts file = maybe (gftagsFile (dropExtension file))
                             (\dir -> dir </> gftagsFile (dropExtension (takeFileName file)))
                             (flag optOutputDir opts)
+
+-- Diff-lists for faster append
+type DList a = Endo [a]
+dlSingle :: a -> DList a
+dlSingle x = Endo (x:)
+
+dlToList :: DList a -> [a]
+dlToList (Endo x) = x []
+
+dlConcatMap :: Foldable t => (a -> DList a) -> t a -> DList a
+dlConcatMap = foldMap
