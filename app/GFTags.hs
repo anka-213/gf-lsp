@@ -36,20 +36,19 @@ data Tag
 -- From GF.Compile.Tags
 type Tags = Map.Map Ident [Tag]
 
-calculateTags :: Options -> Grammar -> (ModuleName, ModuleInfo) -> Map.Map Ident [Tag]
+calculateTags :: Options -> Grammar -> (ModuleName, ModuleInfo) -> Tags
 calculateTags opts gr mo =
-  let imports = Map.fromListWith (++) $ map (\x -> (identifier x, [x]))  $ getImports opts gr mo
+  let imports = Map.fromListWith Set.union $ map (\x -> (identifier x, Set.singleton x))  $ getImports opts gr mo
       locals  = getLocalTags mo
-      txt     = Map.unionWith (++) imports locals
-  in txt
+      txt     = Map.unionWith Set.union imports locals
+  in fmap Set.toList txt
 
 -- TODO: Don't destruct map just to reconstruct the same map
-getLocalTags :: (ModuleName, ModuleInfo) -> Tags
+getLocalTags :: (ModuleName, ModuleInfo) -> Map.Map Ident (Set.Set Tag)
 getLocalTags (m,mi) =
   -- foldMap (_ . getLocations . snd) $ Map.toList (jments mi)
   flip Map.mapWithKey (jments mi) $ \i jment ->
-       [ LocalTag i k l t
-       | (k,l,t)   <- getLocations jment]
+       Set.fromList [ LocalTag i k l t | (k,l,t)   <- getLocations jment]
   where
     getLocations :: Info -> [] (String,FileLocation,Maybe String)
     getLocations (AbsCat mb_ctxt)               = maybe (loc "cat")          mb_ctxt

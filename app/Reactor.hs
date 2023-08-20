@@ -538,7 +538,7 @@ findTagsForIdent modName ident tags = do
     case Map.lookup ident mtags of
       Nothing -> do
         Left $ "Didn't find tags for ident: " ++ show ident ++ " in module " ++ show modName
-      Just tag -> do pure tag
+      Just tag -> pure tag
     -- -- debugM logger "reactor.handle" $ "Found tags for ident: " ++ show tag
     -- pure tag
 
