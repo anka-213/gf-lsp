@@ -382,13 +382,17 @@ handle logger = mconcat
                   debugM logger "hover.handle" "Running linker"
                   (errOut, (output, r)) <- liftIO $ captureStdErr $ captureStdout $ E.try @SomeException $ GF.tryIOE $ GF.link opts (absName , gr)
                   debugM logger "hover.handle" "Ran link pgf"
-                  debugM logger "hover.handle" $ "Got stderr: " ++ show errOut
-                  debugM logger "hover.handle" $ "Got stdout: " ++ show output
+                  unless (null errOut) $
+                    debugM logger "hover.handle" $ "Got stderr: " ++ show errOut
+                  unless (null output) $
+                    debugM logger "hover.handle" $ "Got stdout: " ++ show output
                   case r of
                     Left exc -> do
                       errorM logger "reactor.handle.hover" $ "Got exception from GF: " ++ show exc
+                      responder $ Left $ J.ResponseError J.InternalError ("GF Exception: " <> T.pack (show exc)) Nothing
                     Right (GF.Bad err) -> do
                       errorM logger "reactor.handle.hover" $ "Linking failed with: " ++ show err
+                      responder $ Left $ J.ResponseError J.InternalError ("Linker failure: " <> T.pack (show err)) Nothing
                     Right (GF.Ok pgf) -> do
                       case PGF.inferExpr pgf expr of
                         Left errorMessage -> do
@@ -462,31 +466,34 @@ handle logger = mconcat
           debugM logger "def" $ "Found word: " ++ show fullWord
           -- debugM logger "reactor.handle" $ "Guessing range: " ++ show range
           (tags, gr, modEnv) <- getCompileEnv
-          let opts = GF.modifyFlags $ \flags -> flags
-                { GF.optOutputDir = Just outputDir
-                , GF.optGFODir = Just outputDir
-                , GF.optPMCFG = False
-                , GF.optVerbosity = GF.Quiet
-                -- , GF.optStopAfterPhase = Linker -- Default Compile
-                }
           case takeBaseName <$> fileName of
             Nothing -> do
               -- TODO: Clean this nesting up
               debugM logger "reactor.handle" $ "Didn't find filename for: " ++ show doc
               responder $ Right $ J.InR $ J.InL $ J.List []
             Just modName -> do
-              debugM logger "hover.handle" $ "For file named: " ++ show modName
+              debugM logger "definition.handle" $ "For file named: " ++ show modName
               mtag <- findTagsForIdentDeep logger (GF.moduleNameS modName) (GF.identS $ T.unpack fullWord) tags
               case mtag of
                 Nothing -> do
                   warningM logger "reactor.handle" "Failed to find tag"
                   -- Warning already handled
                   responder $ Right $ J.InR $ J.InL $ J.List []
-                Just (LocalTag _ident _kind (fil,GF.Local l c) _typ) -> do
+                Just (LocalTag _ident _kind (fil,tag) _typ) -> do
+                  debugM logger "definition.handle" $ "Initial file loc: " ++ show fil
+                  let getLoc fil0 tag0 = case tag0 of
+                        GF.Local l c -> pure (fil0, l,c)
+                        GF.NoLoc -> do
+                          warningM logger "definition.handle" $ "No location found"
+                          pure (fil0, 0,0)
+                        GF.External fil' tag' -> do
+                          debugM logger "definition.handle" $ "Found external loc: " ++ show fil'
+                          getLoc fil' tag'
+                  (fil', l,c) <- getLoc fil tag
                   let defPos = mkPos l c :: J.Position
-                  let uri = J.filePathToUri fil :: J.Uri
+                  let uri = J.filePathToUri fil' :: J.Uri
                   responder $ Right $ J.InL $ J.Location uri (J.Range defPos defPos)
-                Just otherTag ->
+                Just otherTag@ImportedTag {} ->
                   responder $ Left $ J.ResponseError J.InternalError ("IMPOSSIBLE: " <> T.pack (show otherTag)) Nothing
               -- pure ()
               -- responder
