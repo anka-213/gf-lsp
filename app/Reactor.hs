@@ -565,8 +565,15 @@ getHoverString logger pos doc = do
           let (prefix, postfix) = T.splitAt (fromIntegral col) selectedLine
           -- TODO: Use less naive lexer
           -- TODO: Handle newline!
-          let preWord = T.takeWhileEnd (/= ' ') prefix
-          let postWord = T.takeWhile (/= ' ') postfix
+          let isIdentChar c =
+                (c == '_') ||
+                (c == '\'') ||
+                (c >= '0' && c <= '9') ||
+                (c >= 'a' && c <= 'z') ||
+                (c >= 'A' && c <= 'Z') ||
+                (c >= '\192' && c <= '\255' && c /= '\247' && c /= '\215')
+          let preWord = T.takeWhileEnd isIdentChar prefix
+          let postWord = T.takeWhile isIdentChar postfix
           let fullWord = preWord <> postWord
           debugM logger "reactor.handle" $ "Hovering word: " ++ show fullWord
           let range = J.Range (pos & JL.character -~ fromIntegral (T.length preWord))
