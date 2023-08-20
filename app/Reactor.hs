@@ -407,8 +407,9 @@ handle logger = mconcat
                               -- Warning already handled
                               responder (Right Nothing)
                             _ -> do
-                              debugM logger "reactor.handle" $ "Found tags: " ++ show (map snd typeTags)
-                              let message = [PGF.showExpr [] expr ++ " : " ++ typ | (typ, _) <- typeTags ]
+                              debugM logger "reactor.handle" "Found tags:"
+                              forM_ (map snd typeTags) $ \tag -> debugM logger "hover.handle" $ "tags: " ++ show tag
+                              let message = List.nub [ PGF.showExpr [] expr ++ " : " ++ typ | (typ, _) <- typeTags ]
                               let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack $ unlines message
                                   rsp = J.Hover ms (Just range)
                               responder $ Right $ Just rsp
@@ -509,7 +510,7 @@ handle logger = mconcat
                     let defPos = mkPos l c :: J.Position
                     let uri = J.filePathToUri fil' :: J.Uri
                     pure $ J.Location uri (J.Range defPos defPos)
-                  responder $ Right $ J.InR $ J.InL $ J.List allLocs
+                  responder $ Right $ J.InR $ J.InL $ J.List $ List.nub allLocs
   ]
 
 -- findTagsForIdentDeep :: GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> ExceptT String (LspM LspContext) ()
