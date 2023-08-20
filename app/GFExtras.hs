@@ -19,7 +19,7 @@ import GF.Data.Operations(raise,(+++),err)
 import Control.Monad(foldM,when,(<=<),filterM,liftM)
 import GF.System.Directory(doesFileExist,getModificationTime)
 import System.FilePath((</>),isRelative,dropFileName)
-import qualified Data.Map as Map(empty,insert,elems) --lookup
+import qualified Data.Map as Map(empty,insert,elems, Map) --lookup
 import Data.List(nub)
 import Data.Time(UTCTime)
 import GF.Text.Pretty(render,($$),(<+>),nest)
@@ -46,8 +46,8 @@ compileSourceGrammar opts gr = do
 
 compileModule :: Options -- ^ Options from program command line and shell command.
               -> CompileEnv -> FilePath -> IOE CompileEnv
-compileModule opts1 env@(_,rfs) file =
-  do file <- getRealFile file
+compileModule opts1 env@(allTags, _,rfs) file =
+  do file <- getRealFile opts1 file
      opts0 <- getOptionsFromFile file
      let curr_dir = dropFileName file
      lib_dirs <- getLibraryDirectory (addOptions opts0 opts1)
@@ -64,48 +64,31 @@ compileModule opts1 env@(_,rfs) file =
      let names = map justModuleName files
      putIfVerb opts $ "modules to include:" +++ show names ----
      foldM (compileOne' opts) env files
-  where
-    getRealFile file = do
-      exists <- doesFileExist file
-      if exists
-        then return file
-        else if isRelative file
-               then do
-                       lib_dirs <- getLibraryDirectory opts1
-                       let candidates = [ lib_dir </> file | lib_dir <- lib_dirs ]
-                       putIfVerb opts1 (render ("looking for: " $$ nest 2 candidates))
-                       file1s <- filterM doesFileExist candidates
-                       case length file1s of
-                         0 -> raise (render ("Unable to find: " $$ nest 2 candidates))
-                         1 -> do return $ head file1s
-                         _ -> do putIfVerb opts1 ("matched multiple candidates: " +++ show file1s)
-                                 return $ head file1s
-               else raise (render ("File" <+> file <+> "does not exist"))
 
 compileOne' :: Options -> CompileEnv -> FullPath -> IOE CompileEnv
-compileOne' opts env@(gr,_) = extendCompileEnv env <=< writeTagFile opts env <=< compileOne opts gr
+compileOne' opts env@(allTags, gr,_) = extendCompileEnv env <=< writeTagFile opts env <=< compileOne opts gr
 
-writeTagFile :: Options -> CompileEnv -> OneOutput -> IO OneOutput
-writeTagFile opts env@(srcgr, _) input@(Nothing,modl) = ePutStrLn "No filename" >> pure input
-writeTagFile opts env@(srcgr, _) input@(Just file,modl) = ePutStrLn ("Writing tags for: " ++ file) >> input <$ writeMyTags opts srcgr (gf2mygftags opts file) modl
+writeTagFile :: Options -> CompileEnv -> OneOutput -> IO (Tags, OneOutput)
+writeTagFile opts env@(allTags, srcgr, _) input@(_,modl) = pure (calculateTags opts srcgr modl, input)
 
 -- auxiliaries
 
 -- | The environment
 
-type CompileEnv = (Grammar,ModEnv)
+type CompileEnv = (Map.Map ModuleName Tags, Grammar,ModEnv)
 
 emptyCompileEnv :: CompileEnv
-emptyCompileEnv = (emptyGrammar,Map.empty)
+emptyCompileEnv = (Map.empty, emptyGrammar,Map.empty)
 
-extendCompileEnv (gr,menv) (mfile,mo) =
+extendCompileEnv :: CompileEnv -> (Tags,OneOutput) -> IOE CompileEnv
+extendCompileEnv (allTags, gr,menv) (tags,(mfile,mo)) =
   do menv2 <- case mfile of
                 Just file ->
                   do let (mod,imps) = importsOfModule mo
                      t <- getModificationTime file
                      return $ Map.insert mod (t,imps) menv
                 _ -> return menv
-     return (prependModule gr mo,menv2)
+     return (Map.insert (fst mo) tags allTags ,prependModule gr mo,menv2)
 
 
 -- ---------------------------

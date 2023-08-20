@@ -367,7 +367,7 @@ handle logger = mconcat
           let range = J.Range (pos & JL.character -~ fromIntegral (T.length preWord))
                               (pos & JL.character +~ fromIntegral (T.length postWord))
           -- debugM logger "reactor.handle" $ "Guessing range: " ++ show range
-          (gr, modEnv) <- getCompileEnv
+          (tags, gr, modEnv) <- getCompileEnv
           let opts = GF.modifyFlags $ \flags -> flags
                 { GF.optOutputDir = Just outputDir
                 , GF.optGFODir = Just outputDir

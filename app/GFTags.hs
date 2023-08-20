@@ -20,13 +20,13 @@ type FileLocation = (FilePath, Location)
 
 data Tag
     = LocalTag
-       { identifier :: String
+       { identifier :: Ident
        , kind :: String
        , location :: FileLocation
        , typeOf :: String
        }
     | ImportedTag
-       { identifier :: String
+       { identifier :: Ident
        , moduleName :: String
        , moduleAlias :: String
        , tagFileName :: String
@@ -34,21 +34,23 @@ data Tag
     deriving (Show, Eq, Ord)
 
 -- From GF.Compile.Tags
+type Tags = Map.Map Ident Tag
 
-writeMyTags :: (Output m, MonadIO m) => Options -> Grammar -> String -> (ModuleName, ModuleInfo) -> m ()
-writeMyTags opts gr file mo = do
+calculateTags :: Options -> Grammar -> (ModuleName, ModuleInfo) -> Map.Map Ident Tag
+calculateTags opts gr mo =
   let imports = getImports opts gr mo
-      locals  = getLocalTags [] mo
-      txt     = unlines $ map show ((Set.toList . Set.fromList) (imports++locals))
-  putPointE Normal opts ("  write file" +++ file) $ liftIO $ writeFile file txt
+      locals  = getLocalTags mo
+      txt     = Map.fromList $ map (\x -> (identifier x, x)) $ imports++locals
+  in txt
 
-getLocalTags :: [Tag] -> (ModuleName, ModuleInfo) -> [Tag]
-getLocalTags x (m,mi) =
-  [LocalTag (showIdent i) k l t
+getLocalTags :: (ModuleName, ModuleInfo) -> [Tag]
+getLocalTags (m,mi) =
+  -- foldMap (_ . getLocations . snd) $ Map.toList (jments mi)
+  [LocalTag i k l t
        | (i,jment) <- Map.toList (jments mi),
-         (k,l,t)   <- dlToList $ getLocations jment] <> x
+         (k,l,t)   <- getLocations jment]
   where
-    getLocations :: Info -> DList (String,FileLocation,String)
+    getLocations :: Info -> [] (String,FileLocation,String)
     getLocations (AbsCat mb_ctxt)               = maybe (loc "cat")          mb_ctxt
     getLocations (AbsFun mb_type _ mb_eqs _)    = maybe (ltype "fun")        mb_type <>
                                                   maybe (list (loc "def"))   mb_eqs
@@ -66,9 +68,9 @@ getLocalTags x (m,mi) =
                                                   maybe (loc "printname")    mprn
     getLocations _                              = mempty
 
-    loc kind (L loc _) = dlSingle (kind,(msrc mi, loc),"")
+    loc kind (L loc _) = singleton (kind,(msrc mi, loc),"")
 
-    ltype kind (L loc ty) = dlSingle (kind,(msrc mi, loc),render (ppTerm Unqualified 0 ty))
+    ltype kind (L loc ty) = singleton (kind,(msrc mi, loc),render (ppTerm Unqualified 0 ty))
 
     -- maybe f (Just x) = f x
     -- maybe f Nothing  = mempty
@@ -78,6 +80,7 @@ getLocalTags x (m,mi) =
 
     list = foldMap
 
+singleton = (:[])
 
 getImports :: Options -> Grammar -> (ModuleName, ModuleInfo) -> [Tag]
 getImports opts gr mo@(m,mi) = concatMap toDep allOpens
@@ -87,11 +90,11 @@ getImports opts gr mo@(m,mi) = concatMap toDep allOpens
 
     toDep (OSimple m,incl)     =
       let Ok mi = lookupModule gr m
-      in [ImportedTag (showIdent id) (render m) "" $ gf2mygftags opts (orig mi info)
+      in [ImportedTag id (render m) "" $ gf2mygftags opts (orig mi info)
             | (id,info) <- Map.toList (jments mi), filter incl id]
     toDep (OQualif m1 m2,incl) =
       let Ok mi = lookupModule gr m2
-      in [ImportedTag (showIdent id) (render m2) (render m1) $ gf2mygftags opts (orig mi info)
+      in [ImportedTag id (render m2) (render m1) $ gf2mygftags opts (orig mi info)
             | (id,info) <- Map.toList (jments mi), filter incl id]
 
     filter MIAll          id = True
