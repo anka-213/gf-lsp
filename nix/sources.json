@@ -1,4 +1,16 @@
 {
+    "co-log-concurrent": {
+        "branch": "master",
+        "description": "Concurrent backend for the co-log library",
+        "homepage": null,
+        "owner": "qnikst",
+        "repo": "co-log-concurrent",
+        "rev": "80773eba967a59d3618ea022d7060d5329f6f3e8",
+        "sha256": "1pi1ydx6k4p0vzqb2h05kzk7gwnwi77m4xc76wphd0g0apdkdqp8",
+        "type": "tarball",
+        "url": "https://github.com/qnikst/co-log-concurrent/archive/80773eba967a59d3618ea022d7060d5329f6f3e8.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
     "gf-core": {
         "branch": "master",
         "description": "Grammatical Framework core: compiler, shell & runtimes",

@@ -1,5 +1,8 @@
 *.lock
 
+# MacOS junk
+.DS_Store
+
 # nix
 result
 result-*
@@ -27,8 +30,11 @@ cabal.project.local
 .HTF/
 .ghc.environment.*
 
-# Other
+# Local things for me
 local
 
 .nixie
 result
+
+test-chroot
+nix-links
