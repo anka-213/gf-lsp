@@ -10,6 +10,47 @@ let
 
   myHaskellPackages = pkgs.haskell.packages.${compiler}.override {
     overrides = hself: hsuper: {
+      "gf-lsp-static" = (with pkgs; lib.pipe
+        (hself.callCabal2nix
+          "gf-lsp"
+          (gitignore ./.)
+          {
+            # ncurses = (pkgs.ncurses.override { enableStatic = true; });
+          })
+        # ( haskellPackages.callCabal2nix "hevm" ./. {
+        #     # Haskell libs with the same names as C libs...
+        #     # Depend on the C libs, not the Haskell libs.
+        #     # These are system deps, not Cabal deps.
+        #     inherit secp256k1;
+        #   }
+        # )
+        [
+          # (haskell.lib.compose.overrideCabal (old: { testTarget = "test"; }))
+          # (haskell.lib.compose.addTestToolDepends [ solc z3 cvc5 ])
+          (haskell.lib.compose.appendBuildFlags [ "-v3" ])
+          (haskell.lib.compose.appendConfigureFlags (
+            [
+              # "-fci"
+              "--extra-lib-dirs=${stripDylib (pkgs.gmp.override { withStatic = true; })}/lib"
+              # "--extra-lib-dirs=${stripDylib secp256k1-static}/lib"
+              # "--extra-lib-dirs=${stripDylib (libff.override { enableStatic = true; })}/lib"
+              # "--extra-lib-dirs=${zlib.static}/lib"
+              "--extra-lib-dirs=${stripDylib (pkgs.libiconv.override { enableStatic = true; enableShared = false; })}/lib"
+              "--extra-lib-dirs=${stripDylib (libffi.overrideAttrs (_: { dontDisableStatic = true; }))}/lib"
+              "--extra-lib-dirs=${stripDylib (ncurses.override { enableStatic = true; })}/lib"
+            ]
+            ++ lib.optionals stdenv.isLinux [
+              "--enable-executable-static"
+              # TODO: replace this with musl: https://stackoverflow.com/a/57478728
+              "--extra-lib-dirs=${glibc}/lib"
+              "--extra-lib-dirs=${glibc.static}/lib"
+            ]
+          ))
+          haskell.lib.dontHaddock
+        ]).overrideAttrs (final: prev: {
+        # HEVM_SOLIDITY_REPO = solidity;
+        # HEVM_ETHEREUM_TESTS_REPO = ethereum-tests;
+      });
       "gf-lsp" =
         pkgs.haskell.lib.overrideCabal
           (hself.callCabal2nix
@@ -74,7 +115,7 @@ let
   shell = myHaskellPackages.shellFor
     {
       packages = p: [
-        p."gf-lsp"
+        p."gf-lsp-static"
       ];
       buildInputs = [
         myHaskellPackages.haskell-language-server
@@ -91,6 +132,9 @@ let
   exe = pkgs.haskell.lib.justStaticExecutables
     (myHaskellPackages."gf-lsp");
 
+  exe-static = pkgs.haskell.lib.justStaticExecutables
+    (myHaskellPackages."gf-lsp-static");
+
   docker = pkgs.dockerTools.buildImage {
     name = "gf-lsp";
     # runAsRoot = ''
@@ -98,11 +142,24 @@ let
     # '';
     config.Cmd = [ "${exe}/bin/gf-lsp" ];
   };
+
+  # if we pass a library folder to ghc via --extra-lib-dirs that contains
+  # only .a files, then ghc will link that library statically instead of
+  # dynamically (even if --enable-executable-static is not passed to cabal).
+  # we use this trick to force static linking of some libraries on macos.
+  stripDylib = drv: pkgs.runCommand "${drv.name}-strip-dylibs" { } ''
+    mkdir -p $out
+    mkdir -p $out/lib
+    cp -r ${drv}/* $out/
+    rm -rf $out/**/*.dylib
+  '';
 in
 {
   inherit shell;
   inherit exe;
+  inherit exe-static;
   inherit docker;
   inherit myHaskellPackages;
   "gf-lsp" = myHaskellPackages."gf-lsp";
+  "gf-lsp-static" = myHaskellPackages."gf-lsp-static";
 }
