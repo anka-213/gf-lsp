@@ -60,7 +60,7 @@ jobs:
       - run: |
           mv gf-lsp-macos-latest/result/bin/gf-lsp gf-lsp-macos
           mv gf-lsp-ubuntu-latest/result/bin/gf-lsp gf-lsp-ubuntu
-          mv gf-lsp-ubuntu-latest/result-lsp-bundle gf-lsp-ubuntu-bundle
+          mv gf-lsp-ubuntu-latest/result-lsp-bundle gf-lsp-linux-bundle
 
       - name: Release
         uses: softprops/action-gh-release@v0.1.15
@@ -75,7 +75,7 @@ jobs:
           files: |
             gf-lsp-macos
             gf-lsp-ubuntu
-            gf-lsp-ubuntu-bundle
+            gf-lsp-linux-bundle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # GITHUB_REPOSITORY: ${{ GITHUB_REPOSITORY }}
