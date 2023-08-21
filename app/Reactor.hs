@@ -104,6 +104,8 @@ outputDir = ".gf-lsp"
 -- TODO: Show concrete types on hover
 -- TODO: Write tests
 -- TODO: Figure out why compilation of this is slow
+-- TODO: Allow going to definition of modules
+-- TODO: Catch all errors in handlers
 
 
 -- ---------------------------------------------------------------------
