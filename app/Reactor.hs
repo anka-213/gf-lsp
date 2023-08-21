@@ -102,7 +102,6 @@ outputDir = ".gf-lsp"
 
 -- TODO: Generate type lenses for functions
 -- TODO: Show concrete types on hover
--- TODO: Don't regenerate pgf for each hover
 -- TODO: Write tests
 -- TODO: Figure out why compilation of this is slow
 
@@ -379,46 +378,25 @@ handle logger = mconcat
                   debugM logger "hover.handle" $ "Invalid expression: " ++ show fullWord
                   responder (Right Nothing)
                 Just expr -> do
-                  let absName = GF.srcAbsName gr $ GF.moduleNameS modName
-                  debugM logger "hover.handle" "Running linker"
-                  (errOut, (output, r)) <- liftIO $ captureStdErr $ captureStdout $ E.try @SomeException $ GF.tryIOE $ GF.link opts (absName , gr)
-                  debugM logger "hover.handle" "Ran link pgf"
-                  unless (null errOut) $
-                    debugM logger "hover.handle" $ "Got stderr: " ++ show errOut
-                  unless (null output) $
-                    debugM logger "hover.handle" $ "Got stdout: " ++ show output
-                  case r of
-                    Left exc -> do
-                      errorM logger "reactor.handle.hover" $ "Got exception from GF: " ++ show exc
-                      responder $ Left $ J.ResponseError J.InternalError ("GF Exception: " <> T.pack (show exc)) Nothing
-                    Right (GF.Bad err) -> do
-                      errorM logger "reactor.handle.hover" $ "Linking failed with: " ++ show err
-                      responder $ Left $ J.ResponseError J.InternalError ("Linker failure: " <> T.pack (show err)) Nothing
-                    Right (GF.Ok pgf) -> do
-                      case PGF.inferExpr pgf expr of
-                        Left errorMessage -> do
-                          debugM logger "reactor.handle" $ "Unable to find type of expr: " ++ show fullWord
-                          debugM logger "reactor.handle" $ "Got error: " ++ show (PGF.ppTcError errorMessage)
-                          debugM logger "definition.handle" $ "For file named: " ++ show modName
-                          mtag <- findTagsForIdentDeep logger (GF.moduleNameS modName) (GF.identS $ T.unpack fullWord) tags
-                          let typeTags = [ (typ, tag) | tag@LocalTag {gfTypeOf=Just typ} <- mtag ]
-                          case typeTags of
-                            [] -> do
-                              warningM logger "reactor.handle" "Failed to find tag"
-                              -- Warning already handled
-                              responder (Right Nothing)
-                            _ -> do
-                              debugM logger "reactor.handle" "Found tags:"
-                              forM_ (map snd typeTags) $ \tag -> debugM logger "hover.handle" $ "tags: " ++ show tag
-                              let message = List.nub [ PGF.showExpr [] expr ++ " : " ++ typ | (typ, _) <- typeTags ]
-                              let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack $ unlines message
-                                  rsp = J.Hover ms (Just range)
-                              responder $ Right $ Just rsp
-                        Right (expr', exprType) -> do
-                          let message = PGF.showExpr [] expr' ++ " : " ++ PGF.showType [] exprType
-                          let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack message
-                              rsp = J.Hover ms (Just range)
-                          responder (Right $ Just rsp)
+                  debugM logger "hover.handle" $ "For file named: " ++ show modName
+                  let absName = GF.srcAbsName gr (GF.moduleNameS modName)
+                  mtag <- findTagsForIdentDeep logger (GF.moduleNameS modName) (GF.identS $ T.unpack fullWord) tags
+                  matag <- findTagsForIdentDeep logger absName (GF.identS $ T.unpack fullWord) tags
+                  forM_ mtag $ \tag -> debugM logger "hover.handle" $ "Found tags: " ++ show tag
+                  forM_ matag $ \tag -> debugM logger "hover.handle" $ "Found abstract tags: " ++ show tag
+                  let typeTags = [ (typ, tag) | tag@LocalTag {gfTypeOf=Just typ} <- matag ++ mtag ]
+                  case typeTags of
+                    [] -> do
+                      warningM logger "reactor.handle" "Failed to find tag"
+                      -- Warning already handled
+                      responder (Right Nothing)
+                    _ -> do
+                      debugM logger "reactor.handle" "Found tags:"
+                      forM_ (map snd typeTags) $ \tag -> debugM logger "hover.handle" $ "tags: " ++ show tag
+                      let message = List.nub [ PGF.showExpr [] expr ++ " : " ++ typ | (typ, _) <- typeTags ]
+                      let ms = J.HoverContents $ J.markedUpContent "lsp-hello" $ T.pack $ unlines message
+                          rsp = J.Hover ms (Just range)
+                      responder $ Right $ Just rsp
         Nothing -> do
           debugM logger "reactor.handle" $ "Didn't find anything in the VFS for: " ++ show doc
           responder (Right Nothing)
@@ -488,10 +466,13 @@ handle logger = mconcat
               responder $ Right $ J.InR $ J.InL $ J.List []
             Just modName -> do
               debugM logger "definition.handle" $ "For file named: " ++ show modName
+              let absName = GF.srcAbsName gr (GF.moduleNameS modName)
               mtag <- findTagsForIdentDeep logger (GF.moduleNameS modName) (GF.identS $ T.unpack fullWord) tags
+              matag <- findTagsForIdentDeep logger absName (GF.identS $ T.unpack fullWord) tags
               -- debugM logger "definition.handle" $ "Found tags: " ++ show mtag
               forM_ mtag $ \tag -> debugM logger "definition.handle" $ "Found tags: " ++ show tag
-              case map location mtag of
+              forM_ matag $ \tag -> debugM logger "definition.handle" $ "Found abstract tags: " ++ show tag
+              case map location $ matag ++ mtag of
                 [] -> do
                   warningM logger "reactor.handle" "Failed to find tag"
                   -- Warning already handled
