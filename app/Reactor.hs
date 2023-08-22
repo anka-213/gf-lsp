@@ -83,6 +83,7 @@ import Control.Exception (SomeException(SomeException))
 import Data.Typeable (typeRep, typeOf)
 import qualified Data.Map as Map
 import GFTags (Tags, Tag (..))
+import qualified System.IO.Error as E
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -204,10 +205,13 @@ guessLibpath logger = do
   case libPathSetting of
     Just _ -> pure () -- Assume valid setting
     Nothing -> do
-      libPathEnv <- liftIO $ getEnv "GF_LIB_PATH"
-      if not $ null libPathEnv
-        then pure () -- Assume valid setting
-        else do
+      libPathEnv <- liftIO $ E.try @E.IOException $ getEnv "GF_LIB_PATH"
+      case libPathEnv of
+        Right _ -> pure () -- Assume valid setting
+        Left err | not $ E.isDoesNotExistError err -> do
+          errorM logger "guessLibPath" $ "Got unexpected exception: " ++ show err
+        Left e -> do
+          debugM logger "guessLibPath" $ "Got expected exception: " ++ show e
           warningM logger "guessLibPath" "No GF_LIB_PATH found, trying to call gf to get value"
           let nonExistingFile = "non-existing-file-name.gf"
           -- No lib path set, try guessing using the gf in path
