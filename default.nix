@@ -5,6 +5,10 @@ let
 
   gitignore = pkgs.nix-gitignore.gitignoreSourcePure [ "nix\n*.nix\n.github\n.git\n" ./.nixignore ./.gitignore ]; # ./.git/info/exclude
 
+  # TODO: Switch to haskell.nix for better support for cross-compilation
+  # https://input-output-hk.github.io/haskell.nix/
+
+  # TODO: (maybe) Use some static build for linux
 
   hlib = pkgs.haskell.lib;
 
