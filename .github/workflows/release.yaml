@@ -40,14 +40,18 @@ jobs:
       - run: nix build --version
       - name: nix-build
         run: nix build -L -f . exe --extra-experimental-features nix-command
-      - name: Make bundle
+      - name: Build redistributable for MacOS
+        run: nix build -L -f . exe --extra-experimental-features nix-command -o result-redistributable
+        if: ${{ matrix.os == 'macos-latest' }}
+      - name: Make bundle for linux
         run: nix bundle -f . exe --extra-experimental-features 'nix-command flakes' -o result-lsp-bundle
         if: ${{ matrix.os == 'ubuntu-latest' }}
       - uses: actions/upload-artifact@v2
         with:
           name: gf-lsp-${{ matrix.os }}
+            # result/bin/gf-lsp
           path: |
-            result/bin/gf-lsp
+            result-redistributable/bin/gf-lsp
             result-lsp-bundle
 
   make-release:
@@ -57,9 +61,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v2
       - run: ls -lR
+      # TODO make a tarball
       - run: |
-          mv gf-lsp-macos-latest/result/bin/gf-lsp gf-lsp-macos
-          mv gf-lsp-ubuntu-latest/result/bin/gf-lsp gf-lsp-ubuntu
+          mv gf-lsp-macos-latest/result-redistributable/bin/gf-lsp gf-lsp-macos-intel
           mv gf-lsp-ubuntu-latest/result-lsp-bundle gf-lsp-linux-bundle
 
       - name: Release
@@ -71,10 +75,15 @@ jobs:
           draft: true
           name: Experiment with using releases
           body: |
-            Try downloading the server for your OS and see if it works
+            If you're running linux or an intel mac you can:
+              - Download the `gf-lsp-linux-bundle` or `gf-lsp-macos-intel` respectively
+              - Rename it to `gf-lsp`
+              - make it executable using `chmod +x gf-lsp`
+              - and put it in one of the directories in your `$PATH`
+
+              after that reload your editor to make the lsp extension find the executable
           files: |
-            gf-lsp-macos
-            gf-lsp-ubuntu
+            gf-lsp-macos-intel
             gf-lsp-linux-bundle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
