@@ -104,6 +104,8 @@ outputDir = ".gf-lsp"
 -- TODO: Show concrete types on hover
 -- TODO: Write tests
 -- TODO: Figure out why compilation of this is slow
+-- TODO: Allow going to definition of modules
+-- TODO: Catch all errors in handlers
 
 
 -- ---------------------------------------------------------------------
@@ -306,6 +308,10 @@ handle logger = mconcat
     debugM logger "reactor.handle" $ "Processing DidOpenTextDocument for: " ++ show fileName
     -- sendDiagnostics "Example message" (J.toNormalizedUri doc) (Just 0)
     callGF logger doc fileName
+  , notificationHandler J.STextDocumentDidClose $ \msg -> do
+    let doc  = msg ^. J.params . J.textDocument . J.uri
+        fileName =  J.uriToFilePath doc
+    debugM logger "reactor.handle" $ "Processing DidCloseTextDocument for: " ++ show fileName
 
   , notificationHandler J.SWorkspaceDidChangeConfiguration $ \msg -> do
       cfg <- config <$> getConfig
@@ -547,7 +553,6 @@ getHoverString logger pos doc = do
           let selectedLine = rangeLinesFromVfs vf lineRange
           let (prefix, postfix) = T.splitAt (fromIntegral col) selectedLine
           -- TODO: Use less naive lexer
-          -- TODO: Handle newline!
           let isIdentChar c =
                 (c == '_') ||
                 (c == '\'') ||

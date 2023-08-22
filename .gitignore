@@ -32,5 +32,9 @@ cabal.project.local
 
 # Local things for me
 local
+
+.nixie
+result
+
 test-chroot
 nix-links
