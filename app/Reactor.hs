@@ -31,6 +31,7 @@ import qualified Colog.Core as L
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
 import qualified Control.Exception                     as E
+import qualified GHC.IO.Exception                      as EG
 import           Control.Lens hiding (Iso)
 import           Control.Monad
 import           Control.Monad.IO.Class
@@ -41,6 +42,7 @@ import qualified Data.Text                             as T
 import           Prettyprinter ( Pretty(pretty) )
 import           GHC.Generics (Generic)
 import           Language.LSP.Server
+-- import qualified Language.LSP.Server.Core      as LSPCore
 import           Language.LSP.Diagnostics
 import           Language.LSP.Logging (defaultClientLogger)
 import qualified Language.LSP.Types            as J
@@ -61,7 +63,7 @@ import qualified GF.Infra.Option as GF
 
 import GFExtras
 
-import System.Environment (withArgs, setEnv)
+import System.Environment (withArgs, setEnv, getEnv)
 import qualified GF.Support as GF
 -- import qualified GF.Compile as S
 -- import GF.Compiler (linkGrammars)
@@ -76,7 +78,7 @@ import Data.Function (on)
 import Data.Ord (comparing)
 import Control.Applicative ((<|>))
 import qualified PGF
-import System.FilePath (takeBaseName)
+import System.FilePath (takeBaseName, takeDirectory)
 import Control.Exception (SomeException(SomeException))
 import Data.Typeable (typeRep, typeOf)
 import qualified Data.Map as Map
@@ -100,24 +102,29 @@ main = do
 outputDir :: String
 outputDir = ".gf-lsp"
 
--- TODO: Generate type lenses for functions
+-- DONE: Generate type lenses for functions
 -- DONE: Show concrete types on hover
 -- TODO: Write tests
--- TODO: Figure out why compilation of this is slow
+-- WONTFIX: Figure out why compilation of this is slow
 -- TODO: Allow going to definition of modules
 -- TODO: Catch all errors in handlers
--- TODO: Make GF_LIB_PATH a config option
+-- DONE: Make GF_LIB_PATH a config option
 --       Or maybe figure it out using the gf executable
 -- TODO: Handle warnings in case of errors
 -- TODO: Don't reverse errors
 -- TODO: Handle OCCURED_IN which is unindented
 -- TODO: Handle "conflict between" "and" which is unindented
+-- TODO: Show the location in the hover
+-- TODO: Show hover types/definitions for types as well
+-- TODO: Handle cancellation
+
+-- TODO: Tab completion, both for symbols and modules
 
 
 -- ---------------------------------------------------------------------
 
 data LspContext = LspContext { compileEnv :: TVar CompileEnv , config :: Config }
-data Config = Config { fooTheBar :: Maybe Bool, wibbleFactor :: Maybe Int }
+data Config = Config { fooTheBar :: Maybe Bool, wibbleFactor :: Maybe Int, gfLibPath :: Maybe [FilePath] }
   deriving (Generic, J.ToJSON, J.FromJSON, Show)
 
 run :: IO Int
@@ -147,14 +154,20 @@ run = flip E.catches handlers $ do
     dualLogger = clientLogger
 
     serverDefinition = ServerDefinition
-      { defaultConfig = LspContext { compileEnv = cEnv, config = Config {fooTheBar = Just False, wibbleFactor = Just 0 }}
+      { defaultConfig = LspContext { compileEnv = cEnv, config = Config
+            { fooTheBar = Just False
+            , wibbleFactor = Just 0
+            , gfLibPath = Nothing }}
       , onConfigurationChange = \old v -> do
           case J.fromJSON v of
             J.Error e -> Left (T.pack e)
             J.Success cfg -> Right $ old {config = cfg }
       -- , doInitialize = \env _ -> forkIO (reactor rin) >> pure (Right env)
       -- , staticHandlers = lspHandlers rin
-      , doInitialize = \env _ -> forkIO (reactor stderrLogger rin) >> pure (Right env)
+      , doInitialize = \env _ -> do
+          _ <- forkIO (reactor stderrLogger rin)
+          -- env' <- guessLibpath env
+          pure (Right env)
       -- Handlers log to both the client and stderr
       , staticHandlers = lspHandlers dualLogger rin
       -- , staticHandlers = lspHandlers clientLogger rin
@@ -182,6 +195,62 @@ run = flip E.catches handlers $ do
     ioExcept   (e :: E.IOException)       = print e >> return 1
     someExcept (e :: E.SomeException)     = print e >> return 1
 
+-- guessLibpath :: LanguageContextEnv LspContext -> IO (LanguageContextEnv LspContext)
+-- guessLibpath = _
+guessLibpath :: L.LogAction (LspM LspContext) (WithSeverity T.Text) -> LspT LspContext IO ()
+guessLibpath logger = do
+  conf <- getConfig
+  let libPathSetting = gfLibPath $ config conf
+  case libPathSetting of
+    Just _ -> pure () -- Assume valid setting
+    Nothing -> do
+      libPathEnv <- liftIO $ getEnv "GF_LIB_PATH"
+      if not $ null libPathEnv
+        then pure () -- Assume valid setting
+        else do
+          warningM logger "guessLibPath" "No GF_LIB_PATH found, trying to call gf to get value"
+          let nonExistingFile = "non-existing-file-name.gf"
+          -- No lib path set, try guessing using the gf in path
+          response <- liftIO $ E.try @E.IOException $ Process.readProcessWithExitCode "gf" ["-make", nonExistingFile] ""
+          -- (exitCode, out, err)
+          debugM logger "guessLibPath" $ "Got response: " ++ show response
+          case response of
+            Left (EG.IOError _mh EG.NoSuchThing _loc _descr _errno _fnm) ->
+              errorM logger "guessLibPath" $ unlines
+                [ "No GF installation found. Couldn't guess GF_LIB_PATH."
+                , "Either ensure that gf is installed and in PATH or manually set GF_LIB_PATH."
+                , ""
+                , "You can still use the language server, but you won't have RGL available"
+                ]
+            Left err@(EG.IOError mh tp loc descr errno fileNm) -> do
+              debugM logger "guessLibPath" $ "Error of type " ++ show (mh, tp, loc, descr, errno, fileNm)
+              errorM logger "guessLibPath" $ "Unexpected error when running gf: " ++ show err
+              -- error of type (Nothing,does not exist,"readCreateProcessWithExitCode: posix_spawnp","No such file or directory",Just 2,Just "gf")
+            -- Left (SomeException err) -> debugM logger "guessLibPath" $ "Error of type " ++ show (typeOf err)
+            Right (ExitFailure 1, "", err)
+              | ("":"Unable to find: ": pfxFilePaths) <- lines err
+              , Just filepaths <- mapM (List.stripPrefix "  ") pfxFilePaths -> do
+              debugM logger "guessLibPath" $ "GF successfully ran with: " ++ show filepaths
+              let newLibPath = takeDirectory <$> filepaths
+              debugM logger "guessLibPath" $ "Got directory: " ++ show newLibPath
+              modifyConfig $ \ctx -> ctx {config = (config ctx){gfLibPath = Just newLibPath}}
+            Right (exitCode, out, err) -> do
+              errorM logger "guessLibPath" $ unlines
+                [ "Unexpected response from GF: " ++ show exitCode
+                , ""
+                , "Stdout: " ++ out
+                , ""
+                , "Stderr: " ++ err
+                ]
+
+          pure ()
+
+-- | Not atomic, since what's needed is not exported from LSP
+modifyConfig :: MonadLsp config m => (config -> config) -> m ()
+modifyConfig f = do
+  conf <- getConfig
+  setConfig $ f conf
+-- modifyConfig config = LSPCore.stateState resConfig (const ((), config)) -- Not exported
 -- ---------------------------------------------------------------------
 
 syncOptions :: J.TextDocumentSyncOptions
@@ -273,6 +342,7 @@ handle ::  L.LogAction (LspM LspContext) (WithSeverity T.Text) -> Handlers (LspM
 handle logger = mconcat
   [ notificationHandler J.SInitialized $ \_msg -> do
       debugM logger "reactor.handle" "Processing the Initialized notification"
+      guessLibpath logger
       -- foo <- registerCapability J.STextDocumentDefinition (J.DefinitionRegistrationOptions Nothing Nothing) $ \req responder -> do
       --   -- let J.DefinitionParams {J._textDocument = doc, J._position = pos} = req
       --   -- let doc = req ^. J.params . J.textDocument
@@ -585,6 +655,7 @@ callGF logger doc (Just filename) = do
   debugM logger "reactor.handle" $ "Starting gf for " ++ filename
 
   liftIO $ createDirectoryIfMissing False outputDir
+  cfg <- config <$> getConfig
   -- optOutputDir
   -- optGFODir
   -- let defaultFlags = GF.flag id GF.noOptions
@@ -593,6 +664,7 @@ callGF logger doc (Just filename) = do
         , GF.optGFODir = Just outputDir
         , GF.optMode = GF.ModeCompiler
         , GF.optPMCFG = False
+        , GF.optGFLibPath = gfLibPath cfg
         -- , GF.optVerbosity = GF.Verbose
         , GF.optVerbosity = GF.Normal
         -- , GF.optStopAfterPhase = Linker -- Default Compile
