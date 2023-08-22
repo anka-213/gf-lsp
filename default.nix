@@ -151,6 +151,7 @@ let
   gf-lsp-redistributable =
     let
       grep = "${pkgs.gnugrep}/bin/grep";
+      # awk = "${pkgs.awk}/bin/awk"; # Already included in stdenv
       otool = "${pkgs.darwin.binutils.bintools}/bin/otool";
       install_name_tool = "${pkgs.darwin.binutils.bintools}/bin/install_name_tool";
     in
@@ -158,6 +159,15 @@ let
     then pkgs.haskell.lib.dontCheck myHaskellPackages.gf-lsp-static
     else
       pkgs.runCommand "stripNixRefs" { } ''
+        # Find the rpaths of an executable
+        lsrpath() {
+            ${otool} -l "$@" |
+            awk '
+                /^[^ ]/ {f = 0}
+                $2 == "LC_RPATH" && $1 == "cmd" {f = 1}
+                f && gsub(/^ *path | \(offset [0-9]+\)$/, "") == 2
+            '
+        }
         mkdir -p $out/bin
         cp ${pkgs.haskell.lib.dontCheck myHaskellPackages.gf-lsp-static}/bin/gf-lsp $out/bin/
         # get the list of dynamic libs from otool and tidy the output
@@ -165,10 +175,13 @@ let
         # get the paths for libncurses and libiconv
         ncurses=$(echo "$libs" | ${grep} '^/nix/store/.*-ncurses')
         iconv=$(echo "$libs" | ${grep} '^/nix/store/.*-libiconv')
+        # Get the rpath for the CoreFoundation.framework
+        rpath=$(lsrpath $out/bin/gf-lsp)
         # rewrite /nix/... library paths to point to /usr/lib
         chmod 777 $out/bin/gf-lsp
         ${install_name_tool} -change "$ncurses" /usr/lib/libncurses.dylib $out/bin/gf-lsp
         ${install_name_tool} -change "$iconv" /usr/lib/libiconv.dylib $out/bin/gf-lsp
+        ${install_name_tool} -rpath "$rpath" /System/Library/Frameworks $out/bin/gf-lsp
         chmod 555 $out/bin/gf-lsp
       '';
 
