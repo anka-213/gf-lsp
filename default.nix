@@ -17,24 +17,11 @@ let
           {
             # ncurses = (pkgs.ncurses.override { enableStatic = true; });
           })
-        # ( haskellPackages.callCabal2nix "hevm" ./. {
-        #     # Haskell libs with the same names as C libs...
-        #     # Depend on the C libs, not the Haskell libs.
-        #     # These are system deps, not Cabal deps.
-        #     inherit secp256k1;
-        #   }
-        # )
         [
-          # (haskell.lib.compose.overrideCabal (old: { testTarget = "test"; }))
-          # (haskell.lib.compose.addTestToolDepends [ solc z3 cvc5 ])
           (haskell.lib.compose.appendBuildFlags [ "-v3" ])
           (haskell.lib.compose.appendConfigureFlags (
             [
-              # "-fci"
               "--extra-lib-dirs=${stripDylib (pkgs.gmp.override { withStatic = true; })}/lib"
-              # "--extra-lib-dirs=${stripDylib secp256k1-static}/lib"
-              # "--extra-lib-dirs=${stripDylib (libff.override { enableStatic = true; })}/lib"
-              # "--extra-lib-dirs=${zlib.static}/lib"
               # Don't statically link libiconv since it uses data files
               # "--extra-lib-dirs=${stripDylib (pkgs.libiconv.override { enableStatic = true; enableShared = false; })}/lib"
               "--extra-lib-dirs=${stripDylib (libffi.overrideAttrs (_: { dontDisableStatic = true; }))}/lib"
@@ -50,22 +37,7 @@ let
           ))
           haskell.lib.dontHaddock
         ]);
-      "gf-lsp" =
-        pkgs.haskell.lib.overrideCabal
-          (hself.callCabal2nix
-            "gf-lsp"
-            (gitignore ./.)
-            {
-              # ncurses = (pkgs.ncurses.override { enableStatic = true; });
-            })
-          {
-            executableSystemDepends = [
-              # (pkgs.ncurses.override { enableStatic = true; })
-              # # (pkgs.ncurses)
-              # (pkgs.libiconv.override { enableStatic = true; enableShared = false; })
-              # (pkgs.gmp.override { withStatic = true; })
-            ];
-          };
+      "gf-lsp" = hself.callCabal2nix "gf-lsp" (gitignore ./.) { };
       "co-log-concurrent" = hlib.overrideCabal (hlib.unmarkBroken hsuper.co-log-concurrent)
         (_old: {
           src = sources.co-log-concurrent;
