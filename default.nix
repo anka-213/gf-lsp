@@ -35,9 +35,11 @@ let
               # "--extra-lib-dirs=${stripDylib secp256k1-static}/lib"
               # "--extra-lib-dirs=${stripDylib (libff.override { enableStatic = true; })}/lib"
               # "--extra-lib-dirs=${zlib.static}/lib"
-              "--extra-lib-dirs=${stripDylib (pkgs.libiconv.override { enableStatic = true; enableShared = false; })}/lib"
+              # Don't statically link libiconv since it uses data files
+              # "--extra-lib-dirs=${stripDylib (pkgs.libiconv.override { enableStatic = true; enableShared = false; })}/lib"
               "--extra-lib-dirs=${stripDylib (libffi.overrideAttrs (_: { dontDisableStatic = true; }))}/lib"
-              "--extra-lib-dirs=${stripDylib (ncurses.override { enableStatic = true; })}/lib"
+              # Don't statically link ncurses since it uses data files
+              # "--extra-lib-dirs=${stripDylib (ncurses.override { enableStatic = true; })}/lib"
             ]
             ++ lib.optionals stdenv.isLinux [
               "--enable-executable-static"
@@ -47,10 +49,7 @@ let
             ]
           ))
           haskell.lib.dontHaddock
-        ]).overrideAttrs (final: prev: {
-        # HEVM_SOLIDITY_REPO = solidity;
-        # HEVM_ETHEREUM_TESTS_REPO = ethereum-tests;
-      });
+        ]);
       "gf-lsp" =
         pkgs.haskell.lib.overrideCabal
           (hself.callCabal2nix
@@ -143,6 +142,36 @@ let
     config.Cmd = [ "${exe}/bin/gf-lsp" ];
   };
 
+  # Based on this: https://github.com/ethereum/hevm/pull/185
+  # "static" binary for distribution
+  # on linux this is actually a real fully static binary
+  # on macos this has everything except libsystem, libncurses and libiconv
+  # statically linked. we can be confident that these three will always
+  # be provided in a well known location by macos itself.
+  gf-lsp-redistributable =
+    let
+      grep = "${pkgs.gnugrep}/bin/grep";
+      otool = "${pkgs.darwin.binutils.bintools}/bin/otool";
+      install_name_tool = "${pkgs.darwin.binutils.bintools}/bin/install_name_tool";
+    in
+    if pkgs.stdenv.isLinux
+    then pkgs.haskell.lib.dontCheck myHaskellPackages.gf-lsp-static
+    else
+      pkgs.runCommand "stripNixRefs" { } ''
+        mkdir -p $out/bin
+        cp ${pkgs.haskell.lib.dontCheck myHaskellPackages.gf-lsp-static}/bin/gf-lsp $out/bin/
+        # get the list of dynamic libs from otool and tidy the output
+        libs=$(${otool} -L $out/bin/gf-lsp | tail -n +2 | sed 's/^[[:space:]]*//' | cut -d' ' -f1)
+        # get the paths for libncurses and libiconv
+        ncurses=$(echo "$libs" | ${grep} '^/nix/store/.*-ncurses')
+        iconv=$(echo "$libs" | ${grep} '^/nix/store/.*-libiconv')
+        # rewrite /nix/... library paths to point to /usr/lib
+        chmod 777 $out/bin/gf-lsp
+        ${install_name_tool} -change "$ncurses" /usr/lib/libncurses.dylib $out/bin/gf-lsp
+        ${install_name_tool} -change "$iconv" /usr/lib/libiconv.dylib $out/bin/gf-lsp
+        chmod 555 $out/bin/gf-lsp
+      '';
+
   # if we pass a library folder to ghc via --extra-lib-dirs that contains
   # only .a files, then ghc will link that library statically instead of
   # dynamically (even if --enable-executable-static is not passed to cabal).
@@ -158,6 +187,7 @@ in
   inherit shell;
   inherit exe;
   inherit exe-static;
+  inherit gf-lsp-redistributable;
   inherit docker;
   inherit myHaskellPackages;
   "gf-lsp" = myHaskellPackages."gf-lsp";
