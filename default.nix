@@ -60,10 +60,10 @@ let
             })
           {
             executableSystemDepends = [
-              (pkgs.ncurses.override { enableStatic = true; })
-              # (pkgs.ncurses)
-              (pkgs.libiconv.override { enableStatic = true; enableShared = false; })
-              (pkgs.gmp.override { withStatic = true; })
+              # (pkgs.ncurses.override { enableStatic = true; })
+              # # (pkgs.ncurses)
+              # (pkgs.libiconv.override { enableStatic = true; enableShared = false; })
+              # (pkgs.gmp.override { withStatic = true; })
             ];
           };
       "co-log-concurrent" = hlib.overrideCabal (hlib.unmarkBroken hsuper.co-log-concurrent)
