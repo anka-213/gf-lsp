@@ -101,11 +101,17 @@ outputDir :: String
 outputDir = ".gf-lsp"
 
 -- TODO: Generate type lenses for functions
--- TODO: Show concrete types on hover
+-- DONE: Show concrete types on hover
 -- TODO: Write tests
 -- TODO: Figure out why compilation of this is slow
 -- TODO: Allow going to definition of modules
 -- TODO: Catch all errors in handlers
+-- TODO: Make GF_LIB_PATH a config option
+--       Or maybe figure it out using the gf executable
+-- TODO: Handle warnings in case of errors
+-- TODO: Don't reverse errors
+-- TODO: Handle OCCURED_IN which is unindented
+-- TODO: Handle "conflict between" "and" which is unindented
 
 
 -- ---------------------------------------------------------------------
