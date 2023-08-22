@@ -111,7 +111,7 @@ outputDir = ".gf-lsp"
 -- ---------------------------------------------------------------------
 
 data LspContext = LspContext { compileEnv :: TVar CompileEnv , config :: Config }
-data Config = Config { fooTheBar :: Bool, wibbleFactor :: Int }
+data Config = Config { fooTheBar :: Maybe Bool, wibbleFactor :: Maybe Int }
   deriving (Generic, J.ToJSON, J.FromJSON, Show)
 
 run :: IO Int
@@ -141,7 +141,7 @@ run = flip E.catches handlers $ do
     dualLogger = clientLogger
 
     serverDefinition = ServerDefinition
-      { defaultConfig = LspContext { compileEnv = cEnv, config = Config {fooTheBar = False, wibbleFactor = 0 }}
+      { defaultConfig = LspContext { compileEnv = cEnv, config = Config {fooTheBar = Just False, wibbleFactor = Just 0 }}
       , onConfigurationChange = \old v -> do
           case J.fromJSON v of
             J.Error e -> Left (T.pack e)
