@@ -75,8 +75,8 @@ jobs:
           # chmod +x gf-lsp-ubuntu-latest/gf-lsp
           chmod +x gf-lsp-${GITHUB_REF##*/}-MacOS-x64
           chmod +x gf-lsp-${GITHUB_REF##*/}-Linux-x64
-          tar cJf gf-lsp-MacOS-x64.tar.gz gf-lsp-${GITHUB_REF##*/}-MacOS-x64
-          tar cJf gf-lsp-Linux-x64.tar.gz gf-lsp-${GITHUB_REF##*/}-Linux-x64
+          tar caf gf-lsp-MacOS-x64.tar.gz gf-lsp-${GITHUB_REF##*/}-MacOS-x64
+          tar caf gf-lsp-Linux-x64.tar.gz gf-lsp-${GITHUB_REF##*/}-Linux-x64
 
       - name: Release
         uses: softprops/action-gh-release@v0.1.15
