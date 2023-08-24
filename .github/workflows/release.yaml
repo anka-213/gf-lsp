@@ -59,8 +59,8 @@ jobs:
   make-release:
     runs-on: ubuntu-latest
     needs: flakes-simple
-    if: github.ref == 'refs/heads/main'
-    # if: startsWith(github.ref, 'refs/tags/')
+    # if: github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/download-artifact@v2
       - run: ls -lR
@@ -85,17 +85,16 @@ jobs:
         uses: softprops/action-gh-release@v0.1.15
         # if: startsWith(github.ref, 'refs/tags/')
         with:
-          prerelease: true
-          tag_name: prerelease
+          # prerelease: true
+          # tag_name: prerelease
           draft: true
           # name: Version ${github.ref}
           body: |
             # Installation
             If you're running linux or an intel mac you can:
-              - Download the `gf-lsp-Linux-x64` or `gf-lsp-MacOS-x64` respectively
-              - Rename it to `gf-lsp`: `mv gf-lsp-linux-bundle gf-lsp` or `mv gf-lsp-macos-intel gf-lsp`
+              - Download the `gf-lsp-Linux-x64.gz` or `gf-lsp-MacOS-x64.gz` respectively
+              - Unpack it to `gf-lsp`: `gunzip -c gf-lsp-*-x64.gz > gf-lsp`
               - make it executable using `chmod +x gf-lsp`
-              - On macos you need to trust it with: `xattr -dr com.apple.quarantine ./gf-lsp`
               - and put it in one of the directories in your `$PATH`
 
               after that reload your editor to make the lsp extension find the executable.
