@@ -118,6 +118,9 @@ outputDir = ".gf-lsp"
 -- TODO: Show the location in the hover
 -- TODO: Show hover types/definitions for types as well
 -- TODO: Handle cancellation
+-- TODO: Make proper releases with tags
+-- TODO: Check for issues with workspaces
+-- TODO: Make output less spammy
 
 -- TODO: Tab completion, both for symbols and modules
 
