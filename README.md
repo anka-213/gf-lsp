@@ -14,6 +14,25 @@ Only Mac and Linux is currently supported. Windows support will come in the futu
 
 For VS Code, you can install the [Grammatical Framework Language Server](https://marketplace.visualstudio.com/items?itemName=anka-213.gf-vscode) extension and it will automatically install the language server for you.
 
+### Emacs
+
+Install the version of gf-lsp for your system according to the sections below, then put this config in your emacs config file
+
+```
+(use-package eglot
+  :ensure t
+  :config
+  (add-hook 'gf-mode-hook 'eglot-ensure)
+  :custom
+  (eglot-autoshutdown t)  ;; shutdown language server after closing last file
+  (eglot-confirm-server-initiated-edits nil)  ;; allow edits without confirmation
+  )
+
+(with-eval-after-load 'eglot
+  (add-to-list 'eglot-server-programs
+               '(gf-mode . ("gf-lsp" "--lsp"))))
+```
+
 ### Linux and Intel Macs
 
 Prebuilt binaries are available with installation instructions in the [latest release](https://github.com/anka-213/gf-lsp/releases).
