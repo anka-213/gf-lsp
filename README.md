@@ -8,16 +8,55 @@ Currently, it only provides error messages for the currently opened file and it 
 
 ## Installation
 
-This currently requires a patched version of Grammatical Framework, so the easiest way to build it is using [nix](https://nixos.org/). I'll add support for other build workflows later.
+Only Mac and Linux is currently supported. Windows support will come in the future.
 
-To speed up the installation, you can use my binary cache on [cachix](https://app.cachix.org/cache/anka-213)
+### Visual Studio Code
+
+For VS Code, you can install the [Grammatical Framework Language Server](https://marketplace.visualstudio.com/items?itemName=anka-213.gf-vscode) extension and it will automatically install the language server for you.
+
+### Linux and Intel Macs
+
+Prebuilt binaries are available with installation instructions in the [latest release](https://github.com/anka-213/gf-lsp/releases).
+
+On M1 or M2 macs you will need to build from source. See the next section.
+
+### Building from source (necessary on M1 and M2 Macs)
+
+This currently requires a patched version of Grammatical Framework, so the easiest way to build it is using [nix](https://nixos.org/).
+
+Run the following commands in a shell
+
 ```
-bash <(curl -L https://nixos.org/nix/install)           # Install nix
-nix-env -iA cachix -f https://cachix.org/api/v1/install # Install
-cachix use anka-213                                     # Use my binary cache
+# Install the nix build system
+curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+# Ensure that the newly installed commands are available
+. '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh'
+# Build and install the GF Language Server
+nix-env -if https://github.com/anka-213/gf-lsp/archive/main.tar.gz
 ```
 
-There are a couple of ways to build it:
+After this you need to configure your editor to use `~/.nix-profile/bin/gf-lsp` as the language server for `.gf` files.
+
+
+## Developing
+
+You need to install the dependencies using nix.
+
+First install nix:
+```
+curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+```
+Optionally use my binary cache to speed up builds:
+```
+nix-env -iA cachix -f https://cachix.org/api/v1/install
+cachix use anka-213
+```
+Finally enable the nix-shell, to get all the necessary dependencies for building:
+```
+nix-shell
+```
+
+From the new shell you can install it using
 ```
 nix-shell
 cabal install
