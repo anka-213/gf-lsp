@@ -93,6 +93,9 @@ import qualified System.IO.Error as E
 -- ---------------------------------------------------------------------
 --
 
+-- TODO: Add flag for for version number
+-- And for debugging
+
 main :: IO ()
 main = do
   run >>= \case
