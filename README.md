@@ -16,7 +16,7 @@ For VS Code, you can install the [Grammatical Framework Language Server](https:/
 
 ### Emacs
 
-Install the version of gf-lsp for your system according to the sections below, then put this config in your emacs config file
+Install the version of gf-lsp for your system according to the sections below, then install eglot and put this config in your emacs config file
 
 ```
 (use-package eglot
