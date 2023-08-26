@@ -14,6 +14,9 @@ let
 
   myHaskellPackages = pkgs.haskell.packages.${compiler}.override {
     overrides = hself: hsuper: {
+      # Allow substituting on cabal2nix results in CI
+      haskellSrc2nix = args: (hsuper.haskellSrc2nix args).overrideAttrs (_old: { allowSubstitutes = true; });
+
       "gf-lsp-static" = (with pkgs; lib.pipe
         (hself.callCabal2nix
           "gf-lsp"
