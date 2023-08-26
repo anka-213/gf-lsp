@@ -38,10 +38,10 @@ jobs:
       # - name: nix-build --dry-run
       #   run: nix build -L -f . exe --dry-run
       - run: nix build --version
-      - name: nix-build
-        run: nix build -L -f . exe --extra-experimental-features nix-command
-        # Don't build the non-static version on macos
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      # - name: nix-build
+      #   run: nix build -L -f . exe --extra-experimental-features nix-command
+      #   # Don't build the non-static version on macos
+      #   if: ${{ matrix.os == 'ubuntu-latest' }}
       - name: Build redistributable for MacOS
         run: nix build -L -f . gf-lsp-redistributable --extra-experimental-features nix-command -o result-redistributable
         if: ${{ matrix.os == 'macos-latest' }}
