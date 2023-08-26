@@ -137,7 +137,7 @@ let
     if pkgs.stdenv.isLinux
     then pkgs.haskell.lib.dontCheck myHaskellPackages.gf-lsp-static
     else
-      pkgs.runCommand "stripNixRefs" { } ''
+      pkgs.runCommand (with myHaskellPackages.gf-lsp-static; pname + "-redistributable-" + version) { } ''
         # Find the rpaths of an executable
         lsrpath() {
             ${otool} -l "$@" |
