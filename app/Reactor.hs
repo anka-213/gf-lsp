@@ -242,6 +242,8 @@ guessLibpath logger = do
               | ("":msg: pfxFilePaths) <- lines err
               , msg `elem` ["Unable to find: ","None of these files exist:"]
               , Just filepaths <- mapM (List.stripPrefix "  ") pfxFilePaths -> do
+              -- TODO: Use --version (only works for newer versions)
+              -- TODO: Handle majestic somehow (e.g. by compiling a separate copy of RGL)
               debugM logger "guessLibPath" $ "GF successfully ran with: " ++ show filepaths
               let newLibPath = takeDirectory <$> filepaths
               debugM logger "guessLibPath" $ "Got directory: " ++ show newLibPath
