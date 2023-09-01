@@ -239,7 +239,8 @@ guessLibpath logger = do
               -- error of type (Nothing,does not exist,"readCreateProcessWithExitCode: posix_spawnp","No such file or directory",Just 2,Just "gf")
             -- Left (SomeException err) -> debugM logger "guessLibPath" $ "Error of type " ++ show (typeOf err)
             Right (ExitFailure 1, "", err)
-              | ("":"Unable to find: ": pfxFilePaths) <- lines err
+              | ("":msg: pfxFilePaths) <- lines err
+              , msg `elem` ["Unable to find: ","None of these files exist:"]
               , Just filepaths <- mapM (List.stripPrefix "  ") pfxFilePaths -> do
               debugM logger "guessLibPath" $ "GF successfully ran with: " ++ show filepaths
               let newLibPath = takeDirectory <$> filepaths
