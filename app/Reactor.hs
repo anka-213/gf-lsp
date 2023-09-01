@@ -84,6 +84,7 @@ import Data.Typeable (typeRep, typeOf)
 import qualified Data.Map as Map
 import GFTags (Tags, Tag (..))
 import qualified System.IO.Error as E
+import Data.Char (isDigit, isAsciiLower, isAsciiUpper)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -653,9 +654,9 @@ getHoverString logger pos doc = do
           let isIdentChar c =
                 (c == '_') ||
                 (c == '\'') ||
-                (c >= '0' && c <= '9') ||
-                (c >= 'a' && c <= 'z') ||
-                (c >= 'A' && c <= 'Z') ||
+                isDigit c ||
+                isAsciiLower c ||
+                isAsciiUpper c ||
                 (c >= '\192' && c <= '\255' && c /= '\247' && c /= '\215')
           let preWord = T.takeWhileEnd isIdentChar prefix
           let postWord = T.takeWhile isIdentChar postfix
