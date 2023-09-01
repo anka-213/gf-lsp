@@ -518,7 +518,7 @@ handle logger = mconcat
           -- makeCommand only generates commands for diagnostics whose source is us
           makeCommand (J.Diagnostic (J.Range startPo _) _s _c (Just "lsp-hello") _m _t _l) = [J.Command title cmd cmdparams]
             where
-              title = "Apply LSP hello command:" <> head (T.lines _m)
+              title = "Apply LSP hello command:" <> headDef "" (T.lines _m)
               -- NOTE: the cmd needs to be registered via the InitializeResponse message. See lspOptions above
               cmd = "lsp-hello-command"
               -- need 'file' and 'start_pos'
@@ -594,6 +594,10 @@ handle logger = mconcat
                   responder $ Right $ J.InR $ J.InL $ J.List $ List.nub allLocs
   ]
 
+headDef :: a -> [a] -> a
+headDef x [] = x
+headDef _ (x:_) = x
+
 -- findTagsForIdentDeep :: GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> ExceptT String (LspM LspContext) ()
 findTagsForIdentDeep :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
   -> GF.ModuleName -> GF.Ident -> Map.Map GF.ModuleName Tags -> LspM LspContext [Tag]
@@ -604,7 +608,7 @@ findTagsForIdentDeep logger mNm ident tags = do
       pure []
     Right tagsHere -> do
       res <- forM tagsHere $ \tag -> do
-        case head tagsHere of
+        case tag of
           LocalTag _ident _kind _loc _typ -> pure [tag]
           ImportedTag _ident mNm' _al _fil -> do
             debugM logger "findTags" $ "Found imported tag: " ++ show tag
@@ -817,7 +821,7 @@ defRange :: J.Range
 defRange = J.Range (J.Position 0 1) (J.Position 20 5)
 
 splitErrors :: String -> [String]
-splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> head x /= ' ') . lines
+splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> take 1 x /= " ") . lines
 
 -- TODO: Make this more intelligent by handling more cases and figuring out locations
 parseWarnings :: IndentTree -> [(FilePath, Maybe J.Range, (String, Maybe String))]
