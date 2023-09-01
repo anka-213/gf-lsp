@@ -340,12 +340,19 @@ lspHandlers logger rin = mapHandlers goReq goNot (handle logger)
     goReq :: forall (a :: J.Method J.FromClient J.Request). Handler (LspM LspContext) a -> Handler (LspM LspContext) a
     goReq f = \msg k -> do
       env <- getLspEnv
-      liftIO $ atomically $ writeTChan rin $ ReactorAction (runLspT env $ f msg k)
+      let handleErrs = do
+            E.catch @SomeException (runLspT env $ f msg k) $ \e ->
+              runLspT env $ k $ Left $ J.ResponseError J.InternalError (T.pack $ show e) Nothing
+      liftIO $ atomically $ writeTChan rin $ ReactorAction handleErrs
 
     goNot :: forall (a :: J.Method J.FromClient J.Notification). Handler (LspM LspContext) a -> Handler (LspM LspContext) a
     goNot f = \msg -> do
       env <- getLspEnv
-      liftIO $ atomically $ writeTChan rin $ ReactorAction (runLspT env $ f msg)
+      let handleErrs = do
+            E.catch @SomeException (runLspT env $ f msg) $ \(SomeException inner) -> runLspT env $ do
+              warningM logger "Erro" $ "Got error of type " ++ show (typeOf inner)
+              errorM logger "Error" $ show (E.displayException inner)
+      liftIO $ atomically $ writeTChan rin $ ReactorAction handleErrs
 
 -- | Where the actual logic resides for handling requests and notifications.
 handle ::  L.LogAction (LspM LspContext) (WithSeverity T.Text) -> Handlers (LspM LspContext)
