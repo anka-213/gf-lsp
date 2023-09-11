@@ -591,10 +591,11 @@ handle logger = mconcat
                           getLoc fil' tag'
                   allLocs <- forM tagThings $ \(fil,loc) -> do
                     debugM logger "definition.handle" $ "Initial file loc: " ++ show fil
-                    (fil', l,c) <- getLoc fil loc
-                    let defPos = mkPos l c :: J.Position
+                    (fil', l1,l2) <- getLoc fil loc
+                    let pos1 = mkPos l1 1 :: J.Position
+                    let pos2 = mkPos (l2+1) 1 :: J.Position
                     let uri = J.filePathToUri fil' :: J.Uri
-                    pure $ J.Location uri (J.Range defPos defPos)
+                    pure $ J.Location uri (J.Range pos1 pos2)
                   responder $ Right $ J.InR $ J.InL $ J.List $ List.nub allLocs
   ]
 
