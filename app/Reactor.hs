@@ -85,7 +85,7 @@ import qualified Data.Map as Map
 import GFTags (Tags, Tag (..))
 import qualified System.IO.Error as E
 import Data.Char (isDigit, isAsciiLower, isAsciiUpper)
-import Debug.Trace (traceM)
+-- import Debug.Trace (traceM)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -944,16 +944,16 @@ anyIndent x = do
 
 node :: Show a => Int -> ReadP a -> ReadP (Tree a)
 node expectedIndent item = do
-  str <- takeWhile (/='\n') <$> look
-  traceM $ replicate expectedIndent ' ' ++ "Looking at: " ++ show str
+  -- str <- takeWhile (/='\n') <$> look
+  -- traceM $ replicate expectedIndent ' ' ++ "Looking at: " ++ show str
   m <- getIndent
-  traceM $ replicate expectedIndent ' ' ++ "Want " ++ show expectedIndent ++ " have " ++ show m
+  -- traceM $ replicate expectedIndent ' ' ++ "Want " ++ show expectedIndent ++ " have " ++ show m
   guard $ m == expectedIndent
   x <- item
-  traceM $ replicate expectedIndent ' ' ++ "Got item: " ++ show x
+  -- traceM $ replicate expectedIndent ' ' ++ "Got item: " ++ show x
   void (char '\n') <++ eof
   c <- handleChildren m item <++ pure []
-  traceM $ replicate expectedIndent ' ' ++ "Got children: " ++ show c
+  -- traceM $ replicate expectedIndent ' ' ++ "Got children: " ++ show c
   pure $ Node x c
 
 whileM :: Monad m => m Bool -> m a -> m [a]
@@ -966,16 +966,17 @@ whileM p f = go
 handleChildren :: Show a => Int -> ReadP a -> ReadP [Tree a]
 handleChildren parentLevel item = do
   newIndent <- getIndent
-  traceM $ replicate parentLevel ' ' ++ "\\ Want > " ++ show parentLevel ++ " have " ++ show newIndent
+  -- traceM $ replicate parentLevel ' ' ++ "\\ Want > " ++ show parentLevel ++ " have " ++ show newIndent
   guard $ newIndent > parentLevel
-  traceM $ replicate parentLevel ' ' ++ "Ok!"
-  str <- takeWhile (/='\n') <$> look
-  traceM $ replicate parentLevel ' ' ++ "Looking at child: " ++ show str
+  -- traceM $ replicate parentLevel ' ' ++ "Ok!"
+  -- str <- takeWhile (/='\n') <$> look
+  -- traceM $ replicate parentLevel ' ' ++ "Looking at child: " ++ show str
   c <- whileM (hasIndent newIndent) (node newIndent item)
   -- c <- many (node newIndent item)
   -- traceM $ replicate parentLevel ' ' ++ "Got children inner: " ++ show c
-  str2 <- takeWhile (/='\n') <$> look
-  traceM $ replicate parentLevel ' ' ++ "Looking at: " ++ show str2
+  -- str2 <- takeWhile (/='\n') <$> look
+  -- traceM $ replicate parentLevel ' ' ++ "Looking at: " ++ show str2
+  pure ()
   pure c
   -- if newIndent > parentLevel
   --   then many (node newIndent item)
