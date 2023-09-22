@@ -85,6 +85,7 @@ import qualified Data.Map as Map
 import GFTags (Tags, Tag (..))
 import qualified System.IO.Error as E
 import Data.Char (isDigit, isAsciiLower, isAsciiUpper)
+import Debug.Trace (traceM)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -123,6 +124,7 @@ outputDir = ".gf-lsp"
 
 -- TODO: Tab completion, both for symbols and modules
 
+-- TODO: Detect dependencies and automatically recompile dependent modules on change
 
 -- ---------------------------------------------------------------------
 
@@ -703,7 +705,7 @@ callGF logger doc (Just filename) = do
   debugM logger "reactor.handle" $ "Got stdout: " ++ show output
 
   -- Try parsing the warnings
-  let warningForest = case readP_to_S parseForest errOut of
+  let warningForest = case readP_to_S parseForestFinal errOut of
         [(x,"")] -> x
         _ -> []
   mapM_ (debugM logger "parser" . show) warningForest
@@ -777,16 +779,16 @@ mkDiagnostics logger _ _doc warningForest (Right (GF.Ok x)) = do
           publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
         _ -> warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
   pure ()
-mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
+mkDiagnostics logger _opts doc warnings (Right (GF.Bad msg)) = do
 
   warningM logger "reactor.handle" $ "Got error:\n" <> msg
 
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
   -- sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
-  -- liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForest msg
+  -- liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForestFinal msg
   liftIO $ hPrint stderr msg
-  liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForest msg
+  liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForestFinal msg
   let
     nuri = J.toNormalizedUri doc
     msgs = splitErrors msg
@@ -822,6 +824,14 @@ defRange = J.Range (J.Position 0 1) (J.Position 20 5)
 
 splitErrors :: String -> [String]
 splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> take 1 x /= " ") . lines
+
+parseWarningsFromString :: String -> [(FilePath, Maybe J.Range, (String, Maybe String))]
+parseWarningsFromString errOut = parsedWarnings
+  where
+    parsedWarnings = parseWarnings =<< warningForest
+    warningForest = case readP_to_S parseForestFinal errOut of
+        [(x,"")] -> x
+        _ -> []
 
 -- TODO: Make this more intelligent by handling more cases and figuring out locations
 parseWarnings :: IndentTree -> [(FilePath, Maybe J.Range, (String, Maybe String))]
@@ -912,7 +922,7 @@ getIndent = length . takeWhile (==' ') <$> look
 --   _
 
 data Tree a = Node a [Tree a]
-  deriving Show
+  deriving (Show, Eq)
 
 treeToList :: Tree a -> [a]
 treeToList (Node a xs) = a : (treeToList =<< xs)
@@ -923,25 +933,31 @@ parseTree = node 0 ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
 parseForest :: ReadP [Tree (Int,String)]
 -- parseForest = many $ anyIndent ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n')) <* eof
 -- parseForest = handleChildren (-1) ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
-parseForest = many parseTree <* eof
+parseForest = many parseTree
+parseForestFinal :: ReadP [Tree (Int,String)]
+parseForestFinal = parseForest <* eof
 
-anyIndent :: ReadP a -> ReadP (Tree a)
+anyIndent :: Show a => ReadP a -> ReadP (Tree a)
 anyIndent x = do
   m <- getIndent
   node m x
 
-node :: Int -> ReadP a -> ReadP (Tree a)
+node :: Show a => Int -> ReadP a -> ReadP (Tree a)
 node expectedIndent item = do
   m <- getIndent
+  -- traceM $ replicate expectedIndent ' ' ++ "Want " ++ show expectedIndent ++ " have " ++ show m
   guard $ m == expectedIndent
   x <- item
+  -- traceM $ replicate expectedIndent ' ' ++ "Got item: " ++ show x
   void (char '\n') <++ eof
   c <- handleChildren m item <++ pure []
+  -- traceM $ replicate expectedIndent ' ' ++ "Got children: " ++ show c
   pure $ Node x c
 
-handleChildren :: Int -> ReadP a -> ReadP [Tree a]
+handleChildren :: Show a => Int -> ReadP a -> ReadP [Tree a]
 handleChildren parentLevel item = do
   newIndent <- getIndent
+  -- traceM $ replicate parentLevel ' ' ++ "\\ Want > " ++ show parentLevel ++ " have " ++ show newIndent
   guard $ newIndent > parentLevel
   many (node newIndent item)
   -- if newIndent > parentLevel
