@@ -54,6 +54,10 @@ unitTests = testGroup "Unit tests"
       splitErrors warningAndError @?= splitErrorsExpected
   , testCase "Example1 from source code" $ do
       oldErrorParser testCase1 @?= ex1Expected
+  , testCase "Example2 from source code" $ do
+      oldErrorParser testCase2 @?= ex2Expected
+  , testCase "Example3 from source code" $ do
+      oldErrorParser testCase3 @?= ex3Expected
   , testCase "ErrorParser warning" $ do
       oldErrorParser warningAndError @?= warnErrExpected
   ]
@@ -68,6 +72,16 @@ ex1Expected = ([Just "src/swedish/MorphoSwe.gf",Just "src/swedish/MorphoSwe.gf"]
   [(mkRange 31 1 41 1,"src/swedish/MorphoSwe.gf:31-40:\n  Happened in the renaming of ptPretForms\n   constant not found: funnenx\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\n")
   ,(mkRange 20 1 30 1,"src/swedish/MorphoSwe.gf:20-29:\n  Happened in the renaming of ptPretAll\n   constant not found: kox\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\n")
   ])
+
+ex2Expected :: ([Maybe FilePath], [(J.Range, String)])
+ex2Expected = ([Just "grammars/QuestionsEng.gf"],
+  [(mkRange 35 1 36 1,"grammars/QuestionsEng.gf:\n   grammars/QuestionsEng.gf:35:\n     Happened in linearization of MkPred1\n      unknown label cxn in\n        {atype : AType;\n         cn : {s : Number => Case => Str; g : Gender; lock_CN : {}};\n         n2 : {s : Number => Case => Str; c2 : Str; g : Gender;\n               lock_N2 : {}};\n         v : {s : Order => Agr => {fin : Str; inf : Str}; lock_VPS : {}};\n         v2 : {s : Order => Agr => {fin : Str; inf : Str}; c2 : Str;\n               lock_VPS2 : {}}}\n")
+  ])
+
+-- TODO: Guess range
+ex3Expected :: ([Maybe FilePath], [(J.Range, String)])
+ex3Expected = ([Nothing],
+  [(defRange ,"ParadigmsYrl.gf:\n   ParadigmsYrl.gf:\n     Happened in overloading mkA\n      missing record fields: s, c, v type of ss s\n      expected: {s : ResYrl.PsorForm => Str; c : ResYrl.VClass;\n                 lock_A : {}; v : ResYrl.Verbal}\n      inferred: {s : Str}\n      \n")])
 
 warnErrExpected :: ([Maybe String], [(J.Range, String)])
 warnErrExpected = ([Just "PizzaEng.gf"],
