@@ -50,11 +50,19 @@ unitTests = testGroup "Unit tests"
   -- the following test does not hold
   -- , testCase "List comparison (same length)" $
   --     [1, 2, 3] `compare` [1,2,2 :: Int] @?= GT
+  , testCase "SplitErrors" $ do
+      splitErrors warningAndError @?= splitErrorsExpected
   , testCase "Example1 from source code" $ do
       oldErrorParser testCase1 @?= ex1Expected
   , testCase "ErrorParser warning" $ do
       oldErrorParser warningAndError @?= warnErrExpected
   ]
+
+splitErrorsExpected :: [String]
+splitErrorsExpected =
+  ["PizzaEng.gf:\n  Warning: function Firends is not in abstract\n  Warning: category Phr is not in abstract\n  Warning: no linearization of Bar\n  Warning: no linearization type for Foo, inserting default {s : Str}\n  Warning: no linearization type for S, inserting default {s : Str}\n"
+  ,"PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n"
+  ,"\n  ** Maybe you gave too many arguments to mkPhrase\n"]
 
 ex1Expected :: ([Maybe FilePath], [(J.Range, String)])
 ex1Expected = ([Just "src/swedish/MorphoSwe.gf",Just "src/swedish/MorphoSwe.gf"],
