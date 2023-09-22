@@ -826,7 +826,10 @@ defRange :: J.Range
 defRange = J.Range (J.Position 0 1) (J.Position 5 1)
 
 splitErrors :: String -> [String]
-splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> take 1 x /= " ") . lines
+splitErrors = filter removeWarnings . joinRelated . map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> take 1 x /= " ") . lines
+  where
+    removeWarnings = not . ("Warning: " `List.isInfixOf`)
+    joinRelated = id
 
 parseWarningsFromString :: String -> [(FilePath, Maybe J.Range, (String, Maybe String))]
 parseWarningsFromString errOut = parsedWarnings
@@ -943,6 +946,8 @@ forestToString :: [Tree (Int, String)] -> String
 forestToString = unlines . map mkLine . concatMap toList
   where mkLine (n, s) = replicate n ' ' ++ s
 
+-- TODO: Try merging next line if appropirate
+-- TODO: Extract parser to new module
 
 parseForest :: ReadP [Tree (Int,String)]
 -- parseForest = many $ anyIndent ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n')) <* eof

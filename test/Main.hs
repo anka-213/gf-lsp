@@ -60,8 +60,7 @@ unitTests = testGroup "Unit tests"
 
 splitErrorsExpected :: [String]
 splitErrorsExpected =
-  ["PizzaEng.gf:\n  Warning: function Firends is not in abstract\n  Warning: category Phr is not in abstract\n  Warning: no linearization of Bar\n  Warning: no linearization type for Foo, inserting default {s : Str}\n  Warning: no linearization type for S, inserting default {s : Str}\n"
-  ,"PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n"
+  ["PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n"
   ,"\n  ** Maybe you gave too many arguments to mkPhrase\n"]
 
 ex1Expected :: ([Maybe FilePath], [(J.Range, String)])
@@ -72,9 +71,8 @@ ex1Expected = ([Just "src/swedish/MorphoSwe.gf",Just "src/swedish/MorphoSwe.gf"]
 
 -- | TODO: This is not desired
 warnErrExpected :: ([Maybe String], [(J.Range, String)])
-warnErrExpected = ([Nothing,Just "PizzaEng.gf",Nothing],
-  [ (defRange,"PizzaEng.gf:\n  Warning: function Firends is not in abstract\n  Warning: category Phr is not in abstract\n  Warning: no linearization of Bar\n  Warning: no linearization type for Foo, inserting default {s : Str}\n  Warning: no linearization type for S, inserting default {s : Str}\n")
-  , (mkRange 29 1 30 1,"PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n")
+warnErrExpected = ([Just "PizzaEng.gf",Nothing],
+  [ (mkRange 29 1 30 1,"PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n")
   , (defRange,"\n  ** Maybe you gave too many arguments to mkPhrase\n")])
 
 oldErrorParser :: String -> ([Maybe FilePath], [(J.Range, String)])
