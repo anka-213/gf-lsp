@@ -1,0 +1,15 @@
+
+PizzaEng.gf:
+   Warning: function Firends is not in abstract
+   Warning: category Phr is not in abstract
+   Warning: no linearization of Bar
+   Warning: no linearization type for Foo, inserting default {s : Str}
+   Warning: no linearization type for S, inserting default {s : Str}
+PizzaEng.gf:
+   PizzaEng.gf:29:
+     Happened in linearization of Hello
+      A function type is expected for mkPhrase (happily ("hello"
+                                                           ++ r)) instead of type Phrase
+      
+   ** Maybe you gave too many arguments to mkPhrase 
+
