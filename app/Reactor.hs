@@ -88,11 +88,13 @@ import GFTags (Tags, Tag (..))
 import qualified System.IO.Error as E
 import Data.Char (isDigit, isAsciiLower, isAsciiUpper)
 import Data.Foldable (Foldable(toList))
--- import Debug.Trace (traceM)
+-- import Debug.Trace (traceM, traceShowId)
 
 
 traceM :: Applicative f => p -> f ()
 traceM _ = pure ()
+traceShowId :: a -> a
+traceShowId = id
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -125,6 +127,7 @@ outputDir = ".gf-lsp"
 -- TODO: Show the location in the hover
 -- TODO: Show hover types/definitions for types as well
 -- TODO: Handle cancellation
+-- TODO: Add timeout and multithreading
 -- TODO: Make proper releases with tags
 -- TODO: Check for issues with workspaces
 -- TODO: Make output less spammy
@@ -712,9 +715,10 @@ callGF logger doc (Just filename) = do
   debugM logger "reactor.handle" $ "Got stdout: " ++ show output
 
   -- Try parsing the warnings
-  let warningForest = case readP_to_S parseForestFinal errOut of
+  let warningForest = case traceShowId $ readP_to_S parseForestFinal errOut of
         [(x,"")] -> x
-        _ -> []
+        p -> [Node (0, "Parsing warnings failed: " ++ show p) []]
+  debugM logger "parser" $ "Parsed into: " ++ show warningForest
   mapM_ (debugM logger "parser" . show) warningForest
   mapM_ (debugM logger "moreParsed" . show) $ parseWarnings =<< warningForest
 
@@ -786,16 +790,25 @@ mkDiagnostics logger _ _doc warningForest (Right (GF.Ok x)) = do
           publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
         _ -> warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
   pure ()
-mkDiagnostics logger _opts doc warnings (Right (GF.Bad msg)) = do
+mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
 
   warningM logger "reactor.handle" $ "Got error:\n" <> msg
 
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
   -- sendDiagnostics (T.pack msg) (J.toNormalizedUri doc) (Just 1)
   -- sendDiagnostics "Failed to compile" (J.toNormalizedUri doc) (Just 1)
+  let warningForest = readP_to_S parseForestFinal msg
+  debugM logger "Warnings raw" . show $ warningForest
+  let parsedWarnings = parseWarningsFromString msg
+  debugM logger "Warnings parsed" . show $ parsedWarnings
+
+  -- mapM_ (mapM_ (debugM logger "error msg" . show) . fst) $ readP_to_S parseForestFinal msg
+  -- liftIO $ hPrint stderr msg
   -- liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForestFinal msg
-  liftIO $ hPrint stderr msg
-  liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForestFinal msg
+  -- let parsedWarnings = parseWarnings =<< warningForest
+  -- liftIO $ hPrint stderr warningForest
+  -- liftIO $ hPrint stderr parsedWarnings
+  -- liftIO $ hPrint stderr $ J.toNormalizedUri doc
   let
     nuri = J.toNormalizedUri doc
     msgs = splitErrors msg
@@ -930,6 +943,8 @@ getIndent = length . takeWhile (==' ') <$> look
 takeSpaces :: ReadP Int
 takeSpaces = length <$> munch (== ' ')
 
+-- finalRow :: ReadP
+
 -- indented :: Int -> ReadP a -> ReadP [a]
 -- indented minIndent nested = do
 --   m <- getIndent
@@ -955,12 +970,17 @@ forestToString = unlines . map mkLine . concatMap toList
 -- TODO: Try merging next line if appropirate
 -- TODO: Extract parser to new module
 
-parseForest :: ReadP [Tree (Int,String)]
--- parseForest = many $ anyIndent ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n')) <* eof
--- parseForest = handleChildren (-1) ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
-parseForest = manyGreedy anyIndent
+-- parseForest :: ReadP [Tree (Int,String)]
+-- -- parseForest = many $ anyIndent ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n')) <* eof
+-- -- parseForest = handleChildren (-1) ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
+-- parseForest = do
+--   str <- look
+--   traceM $ "parseForest: Looking at: " ++ show str
+--   f <- manyGreedy anyIndent
+--   traceM $ "anyIndent: Got forest: " ++ show f
+--   pure f
 parseForestFinal :: ReadP [Tree (Int,String)]
-parseForestFinal = parseForest -- <* eof
+parseForestFinal = many anyIndent <* eof
 
 anyIndent :: ReadP (Tree (Int, String))
 anyIndent = do
@@ -976,7 +996,7 @@ anyIndent = do
 manyGreedy :: ReadP a -> ReadP [a]
 manyGreedy p = mg
   where
-    mg = sg <++ pure []
+    mg = sg +++ pure []
     sg = do x <- p; rest <- mg; pure (x:rest)
 
 -- Question: Should we be more lenient and not require exact indent match?
@@ -987,7 +1007,7 @@ node expectedIndent = emptyNode <++ node'
   where
     emptyNode = do
       i <- takeSpaces
-      void (char '\n') <++ mfilter (const $ i > 0) eof
+      void (char '\n')
       pure $ Node (i,"") []
 
     node' = do
