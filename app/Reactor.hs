@@ -823,7 +823,7 @@ toNuri :: FilePath -> J.NormalizedUri
 toNuri = J.normalizedFilePathToUri . J.toNormalizedFilePath
 
 defRange :: J.Range
-defRange = J.Range (J.Position 0 1) (J.Position 20 5)
+defRange = J.Range (J.Position 0 1) (J.Position 5 1)
 
 splitErrors :: String -> [String]
 splitErrors = map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> take 1 x /= " ") . lines
