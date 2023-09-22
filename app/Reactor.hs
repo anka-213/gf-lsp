@@ -958,14 +958,26 @@ forestToString = unlines . map mkLine . concatMap toList
 parseForest :: ReadP [Tree (Int,String)]
 -- parseForest = many $ anyIndent ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n')) <* eof
 -- parseForest = handleChildren (-1) ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
-parseForest = many anyIndent
+parseForest = manyGreedy anyIndent
 parseForestFinal :: ReadP [Tree (Int,String)]
-parseForestFinal = parseForest <* eof
+parseForestFinal = parseForest -- <* eof
 
 anyIndent :: ReadP (Tree (Int, String))
 anyIndent = do
   m <- getIndent
-  node m
+  str <- takeWhile (/='\n') <$> look
+  traceM $ "anyIndent: Looking at: " ++ show str
+  t <- node m
+  traceM $ "anyIndent: Got tree: " ++ show t
+  pure t
+
+-- | Like 'many', but prefers to take as many as possible and cuts off as soon
+-- as soon as any data is consumed by the inner parser
+manyGreedy :: ReadP a -> ReadP [a]
+manyGreedy p = mg
+  where
+    mg = sg <++ pure []
+    sg = do x <- p; rest <- mg; pure (x:rest)
 
 -- Question: Should we be more lenient and not require exact indent match?
 
