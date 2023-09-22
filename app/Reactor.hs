@@ -758,6 +758,9 @@ diagFor severity rng msg = J.Diagnostic
 groupByFst :: Ord a => [(a, b)] -> [(a, [b])]
 groupByFst = map (\xs -> (fst (head xs), map snd xs)) . List.groupBy ((==) `on` fst) . List.sortBy (comparing fst)
 
+-- TODO: Handle multiple error files at the same time
+-- This might resolve the issue with errors disappearing
+
 mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
   -> GF.Options -> J.Uri -> IndentForest -> Either SomeException (GF.Err CompileEnv)
   -> LspT LspContext IO ()
