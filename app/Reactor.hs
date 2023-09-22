@@ -986,8 +986,9 @@ node :: Int -> ReadP (Tree (Int, String))
 node expectedIndent = emptyNode <++ node'
   where
     emptyNode = do
-      i <- getIndent
-      Node (i,"") [] <$ string (replicate i ' ' ++ "\n")
+      i <- takeSpaces
+      void (char '\n') <++ mfilter (const $ i > 0) eof
+      pure $ Node (i,"") []
 
     node' = do
       -- str <- takeWhile (/='\n') <$> look
