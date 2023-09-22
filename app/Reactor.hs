@@ -969,7 +969,9 @@ anyIndent = do
 node :: Int -> ReadP (Tree (Int, String))
 node expectedIndent = emptyNode <++ node'
   where
-    emptyNode = Node (0,"") [] <$ char '\n'
+    emptyNode = do
+      i <- getIndent
+      Node (i,"") [] <$ string (replicate i ' ' ++ "\n")
 
     node' = do
       -- str <- takeWhile (/='\n') <$> look

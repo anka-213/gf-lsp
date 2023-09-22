@@ -38,6 +38,8 @@ unitTests = testGroup "Unit tests"
 
   , testCase "Try parsing thing" $ do
      readP_to_S parseTree warningAndError @?= [(firstTree, restStr)]
+  , testCase "Try parsing thing" $ do
+     readP_to_S parseForestFinal "a\n  b\n  \n  c\n" @?=  [([Node (0,"a") [Node (2,"b") [],Node (2,"") [],Node (2,"c") []]],"")]
   , testCase "Try parsing thing2" $ do
      readP_to_S parseForestFinal warningAndError @?= [([firstTree, secondTree, nullTree, thirdTree],"")]
     --  warningAndError @?= []
