@@ -51,7 +51,9 @@ unitTests = testGroup "Unit tests"
   -- , testCase "List comparison (same length)" $
   --     [1, 2, 3] `compare` [1,2,2 :: Int] @?= GT
   , testCase "Example1 from source code" $ do
-      oldErrorParser testCase1 @?= ([],[])
+      oldErrorParser testCase1 @?= ex1Expected
+  , testCase "ErrorParser warning" $ do
+      oldErrorParser warningAndError @?= warnErrExpected
   ]
 
 ex1Expected :: ([Maybe FilePath], [(J.Range, String)])
@@ -59,6 +61,13 @@ ex1Expected = ([Just "src/swedish/MorphoSwe.gf",Just "src/swedish/MorphoSwe.gf"]
   [(mkRange 31 1 41 1,"src/swedish/MorphoSwe.gf:31-40:\n  Happened in the renaming of ptPretForms\n   constant not found: funnenx\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\n")
   ,(mkRange 20 1 30 1,"src/swedish/MorphoSwe.gf:20-29:\n  Happened in the renaming of ptPretAll\n   constant not found: kox\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\n")
   ])
+
+-- | TODO: This is not desired
+warnErrExpected :: ([Maybe String], [(J.Range, String)])
+warnErrExpected = ([Nothing,Just "PizzaEng.gf",Nothing],
+  [ (defRange,"PizzaEng.gf:\n  Warning: function Firends is not in abstract\n  Warning: category Phr is not in abstract\n  Warning: no linearization of Bar\n  Warning: no linearization type for Foo, inserting default {s : Str}\n  Warning: no linearization type for S, inserting default {s : Str}\n")
+  , (mkRange 29 1 30 1,"PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n")
+  , (defRange,"\n  ** Maybe you gave too many arguments to mkPhrase\n")])
 
 oldErrorParser :: String -> ([Maybe FilePath], [(J.Range, String)])
 oldErrorParser msg = (relFiles,diags)
