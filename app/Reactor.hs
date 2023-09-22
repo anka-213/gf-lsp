@@ -771,24 +771,11 @@ mkDiagnostics logger _ _doc warningForest (Right (GF.Ok x)) = do
   if null parsedWarnings
     then flushDiagnosticsBySource 100 $ Just "gf-parser"
     else do
-      let diagsWithFiles = [(filename, (range, msg)) | (filename, range, msg) <- parsedWarnings ]
-      case groupByFst diagsWithFiles of
-        [(relFile, diagInfo)] -> do
-          absFile <- liftIO $ canonicalizePath relFile
-          let nuri' = toNuri absFile
-          --
-          mdoc <- getVirtualFile nuri'
-          fileText <- case mdoc of
-            Just vf -> do
-              let fileText = virtualFileText vf
-              debugM logger "foo" $ "Found file: " ++ show fileText
-              pure $ Just $ T.unpack fileText -- TODO: Make this more efficient
-            Nothing -> do
-              debugM logger "foo" $ "Couldn't find file: " ++ show relFile
-              pure Nothing
-          let diags = [diagFor J.DsWarning (guessRange range ident fileText) msg | (range, (msg, ident)) <- diagInfo]
-          publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
-        _ -> warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
+      mbdiags <- handleWarnings logger parsedWarnings
+      case mbdiags of
+        Nothing -> pure ()
+        Just (nuri', diags) -> publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
+
   pure ()
 mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
 
@@ -830,7 +817,31 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
 
   liftIO $ hPrint stderr nuris
 
-  publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
+  wdiags <- maybe [] snd <$> handleWarnings logger parsedWarnings
+  publishDiagnostics 100 nuri' Nothing (partitionBySource $ diags ++ wdiags)
+
+handleWarnings :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> [(FilePath, Maybe J.Range, (String, Maybe String))] -> LspT LspContext IO (Maybe (J.NormalizedUri, [J.Diagnostic]))
+handleWarnings logger parsedWarnings =  do
+      let diagsWithFiles = [(filename, (range, msg)) | (filename, range, msg) <- parsedWarnings ]
+      case groupByFst diagsWithFiles of
+        [(relFile, diagInfo)] -> do
+          absFile <- liftIO $ canonicalizePath relFile
+          let nuri' = toNuri absFile
+          --
+          mdoc <- getVirtualFile nuri'
+          fileText <- case mdoc of
+            Just vf -> do
+              let fileText = virtualFileText vf
+              debugM logger "foo" $ "Found file: " ++ show fileText
+              pure $ Just $ T.unpack fileText -- TODO: Make this more efficient
+            Nothing -> do
+              debugM logger "foo" $ "Couldn't find file: " ++ show relFile
+              pure Nothing
+          let diags = [diagFor J.DsWarning (guessRange range ident fileText) msg | (range, (msg, ident)) <- diagInfo]
+          -- publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
+          return $ Just (nuri', diags)
+        _ -> Nothing <$ warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
+
 
 allEqual :: Eq a => [a] -> Maybe a
 allEqual (x:xs) | all (==x) xs = Just x
