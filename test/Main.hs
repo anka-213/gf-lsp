@@ -41,6 +41,10 @@ unitTests = testGroup "Unit tests"
     --  warningAndError @?= []
   , testCase "Try parsing warnings" $ do
       parseWarningsFromString warningAndError @?= warningsExpected
+  , testCase "Inverse of tree parse" $ do -- TODO: Property test
+     case readP_to_S parseForestFinal warningAndError  of
+       [(inner,"")] -> forestToString inner @?= warningAndError
+       e -> error $ "Unexpected: " ++ show e
   -- the following test does not hold
   -- , testCase "List comparison (same length)" $
   --     [1, 2, 3] `compare` [1,2,2 :: Int] @?= GT

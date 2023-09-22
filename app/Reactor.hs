@@ -10,6 +10,8 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -Wno-unticked-promoted-constructors #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
 
 {- |
 This is an example language server built with haskell-lsp using a 'Reactor'
@@ -85,6 +87,7 @@ import qualified Data.Map as Map
 import GFTags (Tags, Tag (..))
 import qualified System.IO.Error as E
 import Data.Char (isDigit, isAsciiLower, isAsciiUpper)
+import Data.Foldable (Foldable(toList))
 -- import Debug.Trace (traceM)
 
 -- ---------------------------------------------------------------------
@@ -922,13 +925,18 @@ getIndent = length . takeWhile (==' ') <$> look
 --   _
 
 data Tree a = Node a [Tree a]
-  deriving (Show, Eq)
+  deriving (Show, Eq, Functor, Foldable)
 
 treeToList :: Tree a -> [a]
 treeToList (Node a xs) = a : (treeToList =<< xs)
 
 parseTree :: ReadP (Tree (Int,String))
 parseTree = node 0 ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
+
+forestToString :: [Tree (Int, String)] -> String
+forestToString = unlines . map mkLine . concatMap toList
+  where mkLine (n, s) = replicate n ' ' ++ s
+
 
 parseForest :: ReadP [Tree (Int,String)]
 -- parseForest = many $ anyIndent ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n')) <* eof
@@ -942,6 +950,9 @@ anyIndent x = do
   m <- getIndent
   node m x
 
+-- Question: Should we be more lenient and not require exact indent match?
+
+-- | Parse a tree node with indentation exactly == n
 node :: Show a => Int -> ReadP a -> ReadP (Tree a)
 node expectedIndent item = do
   -- str <- takeWhile (/='\n') <$> look
