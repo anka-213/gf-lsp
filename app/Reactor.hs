@@ -88,7 +88,7 @@ import GFTags (Tags, Tag (..))
 import qualified System.IO.Error as E
 import Data.Char (isDigit, isAsciiLower, isAsciiUpper)
 import Data.Foldable (Foldable(toList))
--- import Debug.Trace (traceM)
+import Debug.Trace (traceM)
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
@@ -918,6 +918,9 @@ getIndent :: ReadP Int
 -- getIndent = length <$> munch (==' ')
 getIndent = length . takeWhile (==' ') <$> look
 
+takeSpaces :: ReadP Int
+takeSpaces = length <$> munch (== ' ')
+
 -- indented :: Int -> ReadP a -> ReadP [a]
 -- indented minIndent nested = do
 --   m <- getIndent
@@ -931,7 +934,10 @@ treeToList :: Tree a -> [a]
 treeToList (Node a xs) = a : (treeToList =<< xs)
 
 parseTree :: ReadP (Tree (Int,String))
-parseTree = node 0 ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
+parseTree = node 0
+
+item :: ReadP (Int, String)
+item = (,) <$> takeSpaces <*> munch1 (/= '\n')
 
 forestToString :: [Tree (Int, String)] -> String
 forestToString = unlines . map mkLine . concatMap toList
@@ -941,31 +947,35 @@ forestToString = unlines . map mkLine . concatMap toList
 parseForest :: ReadP [Tree (Int,String)]
 -- parseForest = many $ anyIndent ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n')) <* eof
 -- parseForest = handleChildren (-1) ((,) <$> getIndent <* skipSpaces <*> munch1 (/= '\n'))
-parseForest = many parseTree
+parseForest = many anyIndent
 parseForestFinal :: ReadP [Tree (Int,String)]
 parseForestFinal = parseForest <* eof
 
-anyIndent :: Show a => ReadP a -> ReadP (Tree a)
-anyIndent x = do
+anyIndent :: ReadP (Tree (Int, String))
+anyIndent = do
   m <- getIndent
-  node m x
+  node m
 
 -- Question: Should we be more lenient and not require exact indent match?
 
 -- | Parse a tree node with indentation exactly == n
-node :: Show a => Int -> ReadP a -> ReadP (Tree a)
-node expectedIndent item = do
-  -- str <- takeWhile (/='\n') <$> look
-  -- traceM $ replicate expectedIndent ' ' ++ "Looking at: " ++ show str
-  m <- getIndent
-  -- traceM $ replicate expectedIndent ' ' ++ "Want " ++ show expectedIndent ++ " have " ++ show m
-  guard $ m == expectedIndent
-  x <- item
-  -- traceM $ replicate expectedIndent ' ' ++ "Got item: " ++ show x
-  void (char '\n') <++ eof
-  c <- handleChildren m item <++ pure []
-  -- traceM $ replicate expectedIndent ' ' ++ "Got children: " ++ show c
-  pure $ Node x c
+node :: Int -> ReadP (Tree (Int, String))
+node expectedIndent = emptyNode <++ node'
+  where
+    emptyNode = Node (0,"") [] <$ char '\n'
+
+    node' = do
+      str <- takeWhile (/='\n') <$> look
+      traceM $ replicate expectedIndent ' ' ++ "Looking at: " ++ show str
+      m <- getIndent
+      traceM $ replicate expectedIndent ' ' ++ "Want " ++ show expectedIndent ++ " have " ++ show m
+      guard $ m == expectedIndent
+      x <- item
+      traceM $ replicate expectedIndent ' ' ++ "Got item: " ++ show x
+      void (char '\n') <++ eof
+      c <- handleChildren m <++ pure []
+      -- traceM $ replicate expectedIndent ' ' ++ "Got children: " ++ show c
+      pure $ Node x c
 
 whileM :: Monad m => m Bool -> m a -> m [a]
 whileM p f = go
@@ -974,15 +984,15 @@ whileM p f = go
       x <- p
       if x then (:) <$> f <*> go else pure []
 
-handleChildren :: Show a => Int -> ReadP a -> ReadP [Tree a]
-handleChildren parentLevel item = do
+handleChildren :: Int -> ReadP [Tree (Int, String)]
+handleChildren parentLevel = do
   newIndent <- getIndent
   -- traceM $ replicate parentLevel ' ' ++ "\\ Want > " ++ show parentLevel ++ " have " ++ show newIndent
   guard $ newIndent > parentLevel
   -- traceM $ replicate parentLevel ' ' ++ "Ok!"
   -- str <- takeWhile (/='\n') <$> look
   -- traceM $ replicate parentLevel ' ' ++ "Looking at child: " ++ show str
-  c <- whileM (hasIndent newIndent) (node newIndent item)
+  c <- whileM (hasIndent newIndent) (node newIndent )
   -- c <- many (node newIndent item)
   -- traceM $ replicate parentLevel ' ' ++ "Got children inner: " ++ show c
   -- str2 <- takeWhile (/='\n') <$> look

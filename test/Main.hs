@@ -37,7 +37,7 @@ unitTests = testGroup "Unit tests"
   , testCase "Try parsing thing" $ do
      readP_to_S parseTree warningAndError @?= [(firstTree, restStr)]
   , testCase "Try parsing thing2" $ do
-     readP_to_S parseForestFinal warningAndError @?= [([firstTree, secondTree, thirdTree],"")]
+     readP_to_S parseForestFinal warningAndError @?= [([firstTree, secondTree, nullTree, thirdTree],"")]
     --  warningAndError @?= []
   , testCase "Try parsing warnings" $ do
       parseWarningsFromString warningAndError @?= warningsExpected
@@ -83,9 +83,11 @@ secondTree =
       [Node (4,"Happened in linearization of Hello")
         [Node (6,"A function type is expected for mkPhrase (happily (\"hello\"")
           [Node (58,"++ r)) instead of type Phrase") []]]]]
+nullTree :: Tree (Int, String)
+nullTree = Node (0,"") []
 thirdTree :: Tree (Int, String)
 thirdTree =
-   Node (0,"** Maybe you gave too many arguments to mkPhrase") []
+   Node (2,"** Maybe you gave too many arguments to mkPhrase") []
 
   -- [([Node (0,"PizzaEng.gf:")
   --     [Node (2,"Warning: function Firends is not in abstract") []
