@@ -38,8 +38,12 @@ unitTests = testGroup "Unit tests"
 
   , testCase "Try parsing thing" $ do
      readP_to_S parseTree warningAndError @?= [(firstTree, restStr)]
-  , testCase "Try parsing thing" $ do
+  , testCase "Try parsing empty middle nodes" $ do
      readP_to_S parseForestFinal "a\n  b\n  \n  c\n" @?=  [([Node (0,"a") [Node (2,"b") [],Node (2,"") [],Node (2,"c") []]],"")]
+  , testCase "Parsing trailing newlines" $ do
+     readP_to_S parseForestFinal "a\n  b\n\n" @?=  [([Node (0,"a") [Node (2,"b") []],Node (0,"") []],"")]
+  , testCase "Parsing final trailing whitespace" $ do
+     readP_to_S parseForestFinal "a\n  b\n\n  " @?=  [([Node (0,"a") [Node (2,"b") []],Node (0,"") []],"  ")]
   , testCase "Try parsing thing2" $ do
      readP_to_S parseForestFinal warningAndError @?= [([firstTree, secondTree, nullTree, thirdTree],"")]
     --  warningAndError @?= []
@@ -62,6 +66,9 @@ unitTests = testGroup "Unit tests"
       oldErrorParser testCase3 @?= ex3Expected
   , testCase "ErrorParser warning" $ do
       oldErrorParser warningAndError @?= warnErrExpected
+  , testCase "TrailingWhitespace" $ do
+      fil <- readFile "test/golden/trailingWhitespace.txt"
+      readP_to_S parseForest fil @?= [(warnTrailingWhitespaceExpected, "")]
   ]
 
 splitErrorsExpected :: [String]
@@ -89,6 +96,23 @@ warnErrExpected :: ([Maybe String], [(J.Range, String)])
 warnErrExpected = ([Just "PizzaEng.gf"],
   [ (mkRange 29 1 30 1,"PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n"
      ++ "\n  ** Maybe you gave too many arguments to mkPhrase\n")])
+
+warnTrailingWhitespaceExpected :: [Tree (Int, String)]
+warnTrailingWhitespaceExpected =
+  [Node (0,"") []
+  ,Node (0,"PizzaEng.gf:") [Node (3,"Warning: function Firends is not in abstract") []
+    ,Node (3,"Warning: category Phr is not in abstract") []
+    ,Node (3,"Warning: no linearization of Bar") []
+    ,Node (3,"Warning: no linearization type for Foo, inserting default {s : Str}") []
+    ,Node (3,"Warning: no linearization type for S, inserting default {s : Str}") []]
+  ,Node (0,"PizzaEng.gf:")
+    [Node (3,"PizzaEng.gf:29:")
+      [Node (5,"Happened in linearization of Hello")
+        [Node (6,"A function type is expected for mkPhrase (happily (\"hello\"")
+              [Node (59,"++ r)) instead of type Phrase") []]
+        ,Node (6,"") []]]
+    ,Node (3,"** Maybe you gave too many arguments to mkPhrase ") []],Node (0,"") []]
+
 
 oldErrorParser :: String -> ([Maybe FilePath], [(J.Range, String)])
 oldErrorParser msg = (relFiles,diags)
