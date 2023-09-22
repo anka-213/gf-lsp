@@ -965,13 +965,13 @@ node expectedIndent = emptyNode <++ node'
     emptyNode = Node (0,"") [] <$ char '\n'
 
     node' = do
-      str <- takeWhile (/='\n') <$> look
-      traceM $ replicate expectedIndent ' ' ++ "Looking at: " ++ show str
+      -- str <- takeWhile (/='\n') <$> look
+      -- traceM $ replicate expectedIndent ' ' ++ "Looking at: " ++ show str
       m <- getIndent
-      traceM $ replicate expectedIndent ' ' ++ "Want " ++ show expectedIndent ++ " have " ++ show m
+      -- traceM $ replicate expectedIndent ' ' ++ "Want " ++ show expectedIndent ++ " have " ++ show m
       guard $ m == expectedIndent
       x <- item
-      traceM $ replicate expectedIndent ' ' ++ "Got item: " ++ show x
+      -- traceM $ replicate expectedIndent ' ' ++ "Got item: " ++ show x
       void (char '\n') <++ eof
       c <- handleChildren m <++ pure []
       -- traceM $ replicate expectedIndent ' ' ++ "Got children: " ++ show c
