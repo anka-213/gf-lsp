@@ -980,7 +980,7 @@ forestToString = unlines . map mkLine . concatMap toList
 --   traceM $ "anyIndent: Got forest: " ++ show f
 --   pure f
 parseForestFinal :: ReadP [Tree (Int,String)]
-parseForestFinal = many anyIndent <* eof
+parseForestFinal = many anyIndent <* takeSpaces <* eof
 
 anyIndent :: ReadP (Tree (Int, String))
 anyIndent = do

@@ -43,7 +43,7 @@ unitTests = testGroup "Unit tests"
   , testCase "Parsing trailing newlines" $ do
      readP_to_S parseForestFinal "a\n  b\n\n" @?=  [([Node (0,"a") [Node (2,"b") []],Node (0,"") []],"")]
   , testCase "Parsing final trailing whitespace" $ do
-     readP_to_S parseForestFinal "a\n  b\n\n  " @?=  [([Node (0,"a") [Node (2,"b") []],Node (0,"") [],Node (2,"") []],"")]
+     readP_to_S parseForestFinal "a\n  b\n\n  " @?=  [([Node (0,"a") [Node (2,"b") []],Node (0,"") []],"")]
   , testCase "Try parsing thing2" $ do
      readP_to_S parseForestFinal warningAndError @?= [([firstTree, secondTree, nullTree, thirdTree],"")]
     --  warningAndError @?= []
