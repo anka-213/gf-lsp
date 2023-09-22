@@ -944,25 +944,45 @@ anyIndent x = do
 
 node :: Show a => Int -> ReadP a -> ReadP (Tree a)
 node expectedIndent item = do
+  str <- takeWhile (/='\n') <$> look
+  traceM $ replicate expectedIndent ' ' ++ "Looking at: " ++ show str
   m <- getIndent
-  -- traceM $ replicate expectedIndent ' ' ++ "Want " ++ show expectedIndent ++ " have " ++ show m
+  traceM $ replicate expectedIndent ' ' ++ "Want " ++ show expectedIndent ++ " have " ++ show m
   guard $ m == expectedIndent
   x <- item
-  -- traceM $ replicate expectedIndent ' ' ++ "Got item: " ++ show x
+  traceM $ replicate expectedIndent ' ' ++ "Got item: " ++ show x
   void (char '\n') <++ eof
   c <- handleChildren m item <++ pure []
-  -- traceM $ replicate expectedIndent ' ' ++ "Got children: " ++ show c
+  traceM $ replicate expectedIndent ' ' ++ "Got children: " ++ show c
   pure $ Node x c
+
+whileM :: Monad m => m Bool -> m a -> m [a]
+whileM p f = go
+  where
+    go = do
+      x <- p
+      if x then (:) <$> f <*> go else pure []
 
 handleChildren :: Show a => Int -> ReadP a -> ReadP [Tree a]
 handleChildren parentLevel item = do
   newIndent <- getIndent
-  -- traceM $ replicate parentLevel ' ' ++ "\\ Want > " ++ show parentLevel ++ " have " ++ show newIndent
+  traceM $ replicate parentLevel ' ' ++ "\\ Want > " ++ show parentLevel ++ " have " ++ show newIndent
   guard $ newIndent > parentLevel
-  many (node newIndent item)
+  traceM $ replicate parentLevel ' ' ++ "Ok!"
+  str <- takeWhile (/='\n') <$> look
+  traceM $ replicate parentLevel ' ' ++ "Looking at child: " ++ show str
+  c <- whileM (hasIndent newIndent) (node newIndent item)
+  -- c <- many (node newIndent item)
+  -- traceM $ replicate parentLevel ' ' ++ "Got children inner: " ++ show c
+  str2 <- takeWhile (/='\n') <$> look
+  traceM $ replicate parentLevel ' ' ++ "Looking at: " ++ show str2
+  pure c
   -- if newIndent > parentLevel
   --   then many (node newIndent item)
   --   else pure []
+
+hasIndent :: Int -> ReadP Bool
+hasIndent n = (== n) <$> getIndent
 
 testCase1 :: String
 testCase1 = "src/swedish/MorphoSwe.gf:31-40:\n  Happened in the renaming of ptPretForms\n   constant not found: funnenx\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\nsrc/swedish/MorphoSwe.gf:20-29:\n  Happened in the renaming of ptPretAll\n   constant not found: kox\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe"

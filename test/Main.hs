@@ -3,15 +3,15 @@
 
 module Main where
 
-import Hedgehog
+import           Hedgehog
 -- import Hedgehog.Main
-import GfLsp
+import           GfLsp
 -- import Language.LSP.Test
-import Test.Tasty as Tasty
-import Test.Tasty.HUnit
-import Reactor
-import Text.RawString.QQ
-import Text.ParserCombinators.ReadP (readP_to_S)
+import           Reactor
+import           Test.Tasty                   as Tasty
+import           Test.Tasty.HUnit
+import           Text.ParserCombinators.ReadP (readP_to_S)
+import           Text.RawString.QQ
 
 
 
@@ -35,8 +35,9 @@ unitTests = testGroup "Unit tests"
       pure ()
 
   , testCase "Try parsing thing" $ do
-     readP_to_S parseTree warningAndError @?= []
-    --  readP_to_S parseForest warningAndError @?= []
+     readP_to_S parseTree warningAndError @?= [(firstTree, restStr)]
+  , testCase "Try parsing thing2" $ do
+     readP_to_S parseForestFinal warningAndError @?= [([firstTree, secondTree, thirdTree],"")]
     --  warningAndError @?= []
   -- the following test does not hold
   , testCase "List comparison (same length)" $
@@ -48,6 +49,40 @@ unitTests = testGroup "Unit tests"
 --   -- , Language.LSP.Test.anyRequest
 --   ]
 
+firstTree :: Tree (Int, String)
+firstTree = Node (0,"PizzaEng.gf:")
+  [Node (2,"Warning: function Firends is not in abstract") []
+  ,Node (2,"Warning: category Phr is not in abstract") []
+  ,Node (2,"Warning: no linearization of Bar") []
+  ,Node (2,"Warning: no linearization type for Foo, inserting default {s : Str}") []
+  ,Node (2,"Warning: no linearization type for S, inserting default {s : Str}") []]
+
+restStr :: String
+restStr = "PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n\n  ** Maybe you gave too many arguments to mkPhrase\n"
+
+secondTree :: Tree (Int, String)
+secondTree =
+   Node (0,"PizzaEng.gf:")
+    [Node (2,"PizzaEng.gf:29:")
+      [Node (4,"Happened in linearization of Hello")
+        [Node (6,"A function type is expected for mkPhrase (happily (\"hello\"")
+          [Node (58,"++ r)) instead of type Phrase") []]]]]
+thirdTree :: Tree (Int, String)
+thirdTree =
+   Node (0,"** Maybe you gave too many arguments to mkPhrase") []
+
+  -- [([Node (0,"PizzaEng.gf:")
+  --     [Node (2,"Warning: function Firends is not in abstract") []
+  --     ,Node (2,"Warning: category Phr is not in abstract") []
+  --     ,Node (2,"Warning: no linearization of Bar") []
+  --     ,Node (2,"Warning: no linearization type for Foo, inserting default {s : Str}") []
+  --     ,Node (2,"Warning: no linearization type for S, inserting default {s : Str}") []
+  --     ]
+  --   ,Node (0,"PizzaEng.gf:") [Node (2,"PizzaEng.gf:29:") [Node (4,"Happened in linearization of Hello") [Node (6,"A function type is expected for mkPhrase (happily (\"hello\"") [Node (58,"++ r)) instead of type Phrase") []]]]],Node (0,"** Maybe you gave too many arguments to mkPhrase") []
+  --   ]
+  --  ,""
+  --  )
+  -- ]
 
 warningAndError :: String
 warningAndError = tail [r|
@@ -64,7 +99,7 @@ PizzaEng.gf:
                                                           ++ r)) instead of type Phrase
 
   ** Maybe you gave too many arguments to mkPhrase
-  |]
+|]
 
 
 {-
@@ -84,6 +119,12 @@ PizzaEng.gf:
 
    ** Maybe you gave too many arguments to mkPhrase
 
+
+[([],"PizzaEng.gf:\n  Warning: function Firends is not in abstract\n  Warning: category Phr is not in abstract\n  Warning: no linearization of Bar\n  Warning: no linearization type for Foo, inserting default {s : Str}\n  Warning: no linearization type for S, inserting default {s : Str}\nPizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n\n  ** Maybe you gave too many arguments to mkPhrase\n")
+,([Node (0,"PizzaEng.gf:") [Node (2,"Warning: function Firends is not in abstract") [],Node (2,"Warning: category Phr is not in abstract") [],Node (2,"Warning: no linearization of Bar") [],Node (2,"Warning: no linearization type for Foo, inserting default {s : Str}") [],Node (2,"Warning: no linearization type for S, inserting default {s : Str}") []]],"PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n\n  ** Maybe you gave too many arguments to mkPhrase\n")
+,([Node (0,"PizzaEng.gf:") [Node (2,"Warning: function Firends is not in abstract") [],Node (2,"Warning: category Phr is not in abstract") [],Node (2,"Warning: no linearization of Bar") [],Node (2,"Warning: no linearization type for Foo, inserting default {s : Str}") [],Node (2,"Warning: no linearization type for S, inserting default {s : Str}") []],Node (0,"PizzaEng.gf:") [Node (2,"PizzaEng.gf:29:") [Node (4,"Happened in linearization of Hello") [Node (6,"A function type is expected for mkPhrase (happily (\"hello\"") [Node (58,"++ r)) instead of type Phrase") []]]]]],"\n  ** Maybe you gave too many arguments to mkPhrase\n")
+,([Node (0,"PizzaEng.gf:") [Node (2,"Warning: function Firends is not in abstract") [],Node (2,"Warning: category Phr is not in abstract") [],Node (2,"Warning: no linearization of Bar") [],Node (2,"Warning: no linearization type for Foo, inserting default {s : Str}") [],Node (2,"Warning: no linearization type for S, inserting default {s : Str}") []],Node (0,"PizzaEng.gf:") [Node (2,"PizzaEng.gf:29:") [Node (4,"Happened in linearization of Hello") [Node (6,"A function type is expected for mkPhrase (happily (\"hello\"") [Node (58,"++ r)) instead of type Phrase") []]]]],Node (0,"** Maybe you gave too many arguments to mkPhrase") []],"")
+]
 
 
 -}
