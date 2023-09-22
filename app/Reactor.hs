@@ -88,7 +88,11 @@ import GFTags (Tags, Tag (..))
 import qualified System.IO.Error as E
 import Data.Char (isDigit, isAsciiLower, isAsciiUpper)
 import Data.Foldable (Foldable(toList))
-import Debug.Trace (traceM)
+-- import Debug.Trace (traceM)
+
+
+traceM :: Applicative f => p -> f ()
+traceM _ = pure ()
 
 -- ---------------------------------------------------------------------
 {-# ANN module ("HLint: ignore Eta reduce"         :: String) #-}
