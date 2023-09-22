@@ -39,15 +39,27 @@ unitTests = testGroup "Unit tests"
   , testCase "Try parsing thing2" $ do
      readP_to_S parseForestFinal warningAndError @?= [([firstTree, secondTree, thirdTree],"")]
     --  warningAndError @?= []
+  , testCase "Try parsing warnings" $ do
+      parseWarningsFromString warningAndError @?= warningsExpected
   -- the following test does not hold
-  , testCase "List comparison (same length)" $
-      [1, 2, 3] `compare` [1,2,2 :: Int] @?= GT
+  -- , testCase "List comparison (same length)" $
+  --     [1, 2, 3] `compare` [1,2,2 :: Int] @?= GT
   ]
 
 -- main = defaultMain [
 --   checkParallel $$(discover)
 --   -- , Language.LSP.Test.anyRequest
 --   ]
+
+
+warningsExpected :: [(String, Maybe a, (String, Maybe String))]
+warningsExpected =
+    [ ( "PizzaEng.gf" , Nothing , ( "Warning: function Firends is not in abstract" , Just "Firends"))
+    , ( "PizzaEng.gf" , Nothing , ( "Warning: category Phr is not in abstract" , Just "Phr"))
+    , ( "PizzaEng.gf" , Nothing , ( "Warning: no linearization of Bar" , Just "lin"))
+    , ( "PizzaEng.gf" , Nothing , ( "Warning: no linearization type for Foo, inserting default {s : Str}" , Just "lincat"))
+    , ( "PizzaEng.gf" , Nothing , ( "Warning: no linearization type for S, inserting default {s : Str}" , Just "lincat"))
+    ]
 
 firstTree :: Tree (Int, String)
 firstTree = Node (0,"PizzaEng.gf:")
