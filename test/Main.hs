@@ -61,7 +61,7 @@ unitTests = testGroup "Unit tests"
 splitErrorsExpected :: [String]
 splitErrorsExpected =
   ["PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n"
-  ,"\n  ** Maybe you gave too many arguments to mkPhrase\n"]
+  ++ "\n  ** Maybe you gave too many arguments to mkPhrase\n"]
 
 ex1Expected :: ([Maybe FilePath], [(J.Range, String)])
 ex1Expected = ([Just "src/swedish/MorphoSwe.gf",Just "src/swedish/MorphoSwe.gf"],
@@ -69,11 +69,10 @@ ex1Expected = ([Just "src/swedish/MorphoSwe.gf",Just "src/swedish/MorphoSwe.gf"]
   ,(mkRange 20 1 30 1,"src/swedish/MorphoSwe.gf:20-29:\n  Happened in the renaming of ptPretAll\n   constant not found: kox\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\n")
   ])
 
--- | TODO: This is not desired
 warnErrExpected :: ([Maybe String], [(J.Range, String)])
-warnErrExpected = ([Just "PizzaEng.gf",Nothing],
-  [ (mkRange 29 1 30 1,"PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n")
-  , (defRange,"\n  ** Maybe you gave too many arguments to mkPhrase\n")])
+warnErrExpected = ([Just "PizzaEng.gf"],
+  [ (mkRange 29 1 30 1,"PizzaEng.gf:\n  PizzaEng.gf:29:\n    Happened in linearization of Hello\n      A function type is expected for mkPhrase (happily (\"hello\"\n                                                          ++ r)) instead of type Phrase\n"
+     ++ "\n  ** Maybe you gave too many arguments to mkPhrase\n")])
 
 oldErrorParser :: String -> ([Maybe FilePath], [(J.Range, String)])
 oldErrorParser msg = (relFiles,diags)

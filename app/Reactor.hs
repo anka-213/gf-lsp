@@ -826,10 +826,12 @@ defRange :: J.Range
 defRange = J.Range (J.Position 0 1) (J.Position 5 1)
 
 splitErrors :: String -> [String]
-splitErrors = filter removeWarnings . joinRelated . map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> take 1 x /= " ") . lines
+splitErrors = joinRelated . filter removeWarnings . map unlines . split (keepDelimsL $ dropInitBlank $ whenElt $ \x -> take 1 x /= " ") . lines
   where
     removeWarnings = not . ("Warning: " `List.isInfixOf`)
-    joinRelated = id
+    joinRelated (x:y:xs) | "\n  **" `List.isPrefixOf` y = (x ++ y): joinRelated xs
+    joinRelated (x:xs) = x : joinRelated xs
+    joinRelated [] = []
 
 parseWarningsFromString :: String -> [(FilePath, Maybe J.Range, (String, Maybe String))]
 parseWarningsFromString errOut = parsedWarnings
