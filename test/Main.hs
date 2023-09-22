@@ -12,6 +12,8 @@ import           Test.Tasty                   as Tasty
 import           Test.Tasty.HUnit
 import           Text.ParserCombinators.ReadP (readP_to_S)
 import           Text.RawString.QQ
+import Data.Bifunctor (first)
+import qualified Language.LSP.Types as J
 
 
 
@@ -48,7 +50,24 @@ unitTests = testGroup "Unit tests"
   -- the following test does not hold
   -- , testCase "List comparison (same length)" $
   --     [1, 2, 3] `compare` [1,2,2 :: Int] @?= GT
+  , testCase "Example1 from source code" $ do
+      oldErrorParser testCase1 @?= ([],[])
   ]
+
+ex1Expected :: ([Maybe FilePath], [(J.Range, String)])
+ex1Expected = ([Just "src/swedish/MorphoSwe.gf",Just "src/swedish/MorphoSwe.gf"],
+  [(mkRange 31 1 41 1,"src/swedish/MorphoSwe.gf:31-40:\n  Happened in the renaming of ptPretForms\n   constant not found: funnenx\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\n")
+  ,(mkRange 20 1 30 1,"src/swedish/MorphoSwe.gf:20-29:\n  Happened in the renaming of ptPretAll\n   constant not found: kox\n   given Predef, Predef, Prelude, DiffSwe, ResSwe, ParamX,\n         CommonScand, MorphoSwe\n")
+  ])
+
+oldErrorParser :: String -> ([Maybe FilePath], [(J.Range, String)])
+oldErrorParser msg = (relFiles,diags)
+  where
+    msgs = splitErrors msg
+    range = maybe (Nothing, defRange) (first Just) . parseErrorMessage
+    (relFiles, ranges) = unzip $ map range msgs
+    diags = zip ranges msgs
+
 
 -- main = defaultMain [
 --   checkParallel $$(discover)
