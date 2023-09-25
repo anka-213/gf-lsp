@@ -2,7 +2,7 @@ cabal-version:       3.0
 
 name:                gf-lsp
 synopsis:            A Language Server Protocol server for Grammatical Framework
-version:             1.0.2.0
+version:             1.0.3.0
 homepage:            https://github.com/anka-213/gf-lsp
 license:             BSD-3-Clause
 author:              Andreas Källberg
