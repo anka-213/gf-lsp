@@ -299,21 +299,6 @@ data ReactorInput
   = ReactorAction (IO ())
   | Diagnostics
 
--- | Analyze the file and send any diagnostics to the client in a
--- "textDocument/publishDiagnostics" notification
-sendDiagnostics :: T.Text -> J.NormalizedUri -> Maybe J.Int32 -> LspM LspContext ()
-sendDiagnostics msg fileUri version = do
-  let
-    diags = [J.Diagnostic
-              (J.Range (J.Position 0 1) (J.Position 0 5))
-              (Just J.DsWarning)  -- severity
-              Nothing  -- code
-              (Just "lsp-hello") -- source
-              msg
-              Nothing -- tags
-              (Just (J.List []))
-            ]
-  publishDiagnostics 100 fileUri version (partitionBySource diags)
 
 -- ---------------------------------------------------------------------
 
