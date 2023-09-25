@@ -787,10 +787,7 @@ mkDiagnostics logger _ doc warningForest (Right (GF.Ok x)) = do
     else do
       -- Flush diagnostics always to ensure diagnostics in other files get cleared
       flushDiagnosticsBySource 100 $ Just srcName
-      mbdiags <- handleWarnings logger nuri parsedWarnings []
-      case mbdiags of
-        Nothing -> pure ()
-        Just (nuri', diags) -> publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
+      handleWarnings logger nuri parsedWarnings []
 
   pure ()
 mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
@@ -815,15 +812,14 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
   let
     nuri = J.toNormalizedUri doc
     msgs = splitErrors msg
+    -- These are the error messages
     fileDiags =
       [ (relFile, DiagInfo J.DsError (Just range) msg1 Nothing)
       | msg1 <- msgs
       , let (relFile, range) = maybe (Nothing, defRange) (first Just) . parseErrorMessage $ msg1
       ]
 
-  (nuri', wdiags) <- fromMaybe (nuri,[]) <$> handleWarnings logger nuri parsedWarnings fileDiags
-  debugM logger "errorMsgs" $ "wdiags: " ++ show wdiags
-  publishDiagnostics 100 nuri' Nothing (partitionBySource wdiags)
+  handleWarnings logger nuri parsedWarnings fileDiags
 
 data DiagInfo = DiagInfo {
   diagSeverity :: J.DiagnosticSeverity,
@@ -838,14 +834,14 @@ handleWarnings :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
     -> J.NormalizedUri
     -> [(FilePath, Maybe J.Range, (String, Maybe String))]
     -> [(Maybe FilePath, DiagInfo)]
-    -> LspT LspContext IO (Maybe (J.NormalizedUri, [J.Diagnostic]))
+    -> LspT LspContext IO ()
 handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
       rootPath <- getRootPath
       let srcName = mkSrcName rootPath nuriCurrent
       let diagsWithFiles = [(Just filename, DiagInfo J.DsWarning rng msg pat) | (filename, rng, (msg, pat)) <- parsedWarnings ]
       -- Error diagnostics first to ensure they are included
-      case groupByFst $ errorDiags ++ diagsWithFiles of
-        [(relFile, diagInfo)] -> do
+      forM_ (groupByFst $ errorDiags ++ diagsWithFiles) $
+        \(relFile, diagInfo) -> do
           nuri' <- liftIO $ maybe (pure nuriCurrent) (fmap toNuri . canonicalizePath) relFile
           --
           mdoc <- getVirtualFile nuri'
@@ -859,8 +855,8 @@ handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
               pure Nothing
           let diags = [diagFor srcName sev (guessRange rng ident fileText) msg | DiagInfo sev rng msg ident <- diagInfo]
           -- publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
-          return $ Just (nuri', diags)
-        _ -> Nothing <$ warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
+          -- return $ Just (nuri', diags)
+          publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
 
 
 allEqual :: Eq a => [a] -> Maybe a
