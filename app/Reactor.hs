@@ -136,6 +136,9 @@ outputDir = ".gf-lsp"
 -- TODO: Tab completion, both for symbols and modules
 
 -- TODO: Detect dependencies and automatically recompile dependent modules on change
+-- TODO: Force recompilation of current file, so we can see warnings on launch
+-- TODO: Consider using hashes instead of timestamps
+-- TODO: Use virtual file system better
 
 -- ---------------------------------------------------------------------
 
@@ -401,6 +404,10 @@ handle logger = mconcat
   , notificationHandler J.STextDocumentDidClose $ \msg -> do
     let doc  = msg ^. J.params . J.textDocument . J.uri
         fileName =  J.uriToFilePath doc
+    rootPath <- getRootPath
+    let nuri = J.toNormalizedUri doc
+    let srcName = mkSrcName rootPath nuri
+    flushDiagnosticsBySource 100 $ Just srcName
     debugM logger "reactor.handle" $ "Processing DidCloseTextDocument for: " ++ show fileName
 
   , notificationHandler J.SWorkspaceDidChangeConfiguration $ \msg -> do
