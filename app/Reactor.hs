@@ -826,7 +826,7 @@ data DiagInfo = DiagInfo {
   diagRange :: Maybe J.Range,
   diagMsg :: String,
   searchToken :: Maybe String -- ^ A token to search for to replace range
- }
+ } deriving Show
   -- WarnInfo (Maybe J.Range) (String, Maybe String)
   -- | ErrInfo J.Range String
 
@@ -840,9 +840,18 @@ handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
       let srcName = mkSrcName rootPath nuriCurrent
       let diagsWithFiles = [(Just filename, DiagInfo J.DsWarning rng msg pat) | (filename, rng, (msg, pat)) <- parsedWarnings ]
       -- Error diagnostics first to ensure they are included
-      forM_ (groupByFst $ errorDiags ++ diagsWithFiles) $
+
+      -- Merge the items with unknown location first
+      canonicallyPathedDiags <- forM (groupByFst $ errorDiags ++ diagsWithFiles) $
         \(relFile, diagInfo) -> do
+          debugM logger "diagnostics for file" $ show relFile ++ ": " ++ show diagInfo
           nuri' <- liftIO $ maybe (pure nuriCurrent) (fmap toNuri . canonicalizePath) relFile
+          debugM logger "canonical" $ show nuri'
+          pure (nuri', diagInfo)
+      -- Now, for each normailized uri:
+      forM_ (groupByFst canonicallyPathedDiags) $
+        \(nuri', diagInfo') -> do
+          let diagInfo = concat diagInfo'
           --
           mdoc <- getVirtualFile nuri'
           fileText <- case mdoc of
@@ -851,7 +860,7 @@ handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
               debugM logger "foo" $ "Found file: " ++ take 100 (show fileText) ++ " ..."
               pure $ Just $ T.unpack fileText -- TODO: Make this more efficient
             Nothing -> do
-              debugM logger "foo" $ "Couldn't find file: " ++ show relFile
+              debugM logger "foo" $ "Couldn't find file: " ++ show nuri'
               pure Nothing
           let diags = [diagFor srcName sev (guessRange rng ident fileText) msg | DiagInfo sev rng msg ident <- diagInfo]
           -- publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
