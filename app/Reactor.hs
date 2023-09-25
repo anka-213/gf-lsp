@@ -88,6 +88,7 @@ import GFTags (Tags, Tag (..))
 import qualified System.IO.Error as E
 import Data.Char (isDigit, isAsciiLower, isAsciiUpper)
 import Data.Foldable (Foldable(toList))
+import qualified System.FilePath as FP
 -- import Debug.Trace (traceM, traceShowId)
 
 
@@ -746,11 +747,15 @@ groupByFst = map (\xs -> (fst (head xs), map snd xs)) . List.groupBy ((==) `on` 
 -- TODO: Handle multiple error files at the same time
 -- This might resolve the issue with errors disappearing
 
-mkSrcName :: J.NormalizedUri -> J.DiagnosticSource
-mkSrcName nuri = "gf-compiler: " <> T.pack (show filepath)
+mkSrcName :: Maybe FilePath -> J.NormalizedUri -> J.DiagnosticSource
+mkSrcName mbRootPath nuri = "gf-compiler: " <> filepath
   where
-    nfpath = J.uriToNormalizedFilePath nuri
-    filepath = J.fromNormalizedFilePath <$> nfpath
+    mbFilePath = do
+      nfpath <- J.uriToNormalizedFilePath nuri
+      rootPath <- mbRootPath
+      pure $ FP.makeRelative rootPath $ J.fromNormalizedFilePath nfpath
+    altName = J.getUri $ J.fromNormalizedUri nuri
+    filepath = maybe altName T.pack mbFilePath
 
 mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
   -> GF.Options -> J.Uri -> IndentForest -> Either SomeException (GF.Err CompileEnv)
@@ -760,8 +765,9 @@ mkDiagnostics logger _opts _doc _warnings (Left (SomeException inner)) = do
   errorM logger "gf-compiler" $ "" ++ show (E.displayException inner)
   pure ()
 mkDiagnostics logger _ doc warningForest (Right (GF.Ok x)) = do
+  rootPath <- getRootPath
   let nuri = J.toNormalizedUri doc
-  let srcName = mkSrcName nuri
+  let srcName = mkSrcName rootPath nuri
   setCompileEnv x
   let parsedWarnings = parseWarnings =<< warningForest
   if null parsedWarnings
@@ -775,6 +781,7 @@ mkDiagnostics logger _ doc warningForest (Right (GF.Ok x)) = do
   pure ()
 mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
 
+  rootPath <- getRootPath
   warningM logger "reactor.handle" $ "Got error:\n" <> msg
 
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
@@ -794,7 +801,7 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
   -- debugM logger "" $ show $ J.toNormalizedUri doc
   let
     nuri = J.toNormalizedUri doc
-    sourceName = mkSrcName nuri
+    sourceName = mkSrcName rootPath nuri
     msgs = splitErrors msg
     fileDiags =
       [ (relFile, DiagInfo J.DsError (Just range) msg1 Nothing)
@@ -840,7 +847,8 @@ handleWarnings :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
     -> [(Maybe FilePath, DiagInfo)]
     -> LspT LspContext IO (Maybe (J.NormalizedUri, [J.Diagnostic]))
 handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
-      let srcName = mkSrcName nuriCurrent
+      rootPath <- getRootPath
+      let srcName = mkSrcName rootPath nuriCurrent
       let diagsWithFiles = [(Just filename, DiagInfo J.DsWarning rng msg pat) | (filename, rng, (msg, pat)) <- parsedWarnings ]
       -- Error diagnostics first to ensure they are included
       case groupByFst $ errorDiags ++ diagsWithFiles of
