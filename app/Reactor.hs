@@ -768,13 +768,14 @@ mkDiagnostics logger _opts _doc _warnings (Left (SomeException inner)) = do
   warningM logger "gf-compiler" $ "Got error of type " ++ show (typeOf inner)
   errorM logger "gf-compiler" $ "" ++ show (E.displayException inner)
   pure ()
-mkDiagnostics logger _ _doc warningForest (Right (GF.Ok x)) = do
+mkDiagnostics logger _ doc warningForest (Right (GF.Ok x)) = do
+  let nuri = J.toNormalizedUri doc
   setCompileEnv x
   let parsedWarnings = parseWarnings =<< warningForest
   if null parsedWarnings
     then flushDiagnosticsBySource 100 $ Just "gf-parser"
     else do
-      mbdiags <- handleWarnings logger parsedWarnings
+      mbdiags <- handleWarnings logger nuri parsedWarnings []
       case mbdiags of
         Nothing -> pure ()
         Just (nuri', diags) -> publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
@@ -802,8 +803,13 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
   let
     nuri = J.toNormalizedUri doc
     msgs = splitErrors msg
-    range = maybe (Nothing, defRange) (first Just) . parseErrorMessage
-    (relFiles, ranges) = unzip $ map range msgs
+    fileDiags =
+      [ (relFile, DiagInfo J.DsError (Just range) msg1 Nothing)
+      | msg1 <- msgs
+      , let (relFile, range) = maybe (Nothing, defRange) (first Just) . parseErrorMessage $ msg1
+      ]
+    rangeFor = maybe (Nothing, defRange) (first Just) . parseErrorMessage
+    (relFiles, ranges) = unzip $ map rangeFor msgs
     diags = zipWith (diagFor J.DsError) ranges msgs
   absFiles <- liftIO $ mapM (mapM canonicalizePath) relFiles
   -- absFiles <- liftIO $ mapM (getRealFile opts) relFiles
@@ -820,16 +826,28 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
 
   liftIO $ hPrint stderr nuris
 
-  wdiags <- maybe [] snd <$> handleWarnings logger parsedWarnings
+  wdiags <- maybe [] snd <$> handleWarnings logger nuri parsedWarnings fileDiags
   publishDiagnostics 100 nuri' Nothing (partitionBySource $ diags ++ wdiags)
 
-handleWarnings :: LogAction (LspT LspContext IO) (WithSeverity T.Text) -> [(FilePath, Maybe J.Range, (String, Maybe String))] -> LspT LspContext IO (Maybe (J.NormalizedUri, [J.Diagnostic]))
-handleWarnings logger parsedWarnings =  do
-      let diagsWithFiles = [(filename, (range, msg)) | (filename, range, msg) <- parsedWarnings ]
-      case groupByFst diagsWithFiles of
+data DiagInfo = DiagInfo {
+  severity :: J.DiagnosticSeverity,
+  diagRange :: Maybe J.Range,
+  diagMsg :: String,
+  searchToken :: Maybe String -- ^ A token to search for to replace range
+ }
+  -- WarnInfo (Maybe J.Range) (String, Maybe String)
+  -- | ErrInfo J.Range String
+
+handleWarnings :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
+    -> J.NormalizedUri
+    -> [(FilePath, Maybe J.Range, (String, Maybe String))]
+    -> [(Maybe FilePath, DiagInfo)]
+    -> LspT LspContext IO (Maybe (J.NormalizedUri, [J.Diagnostic]))
+handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
+      let diagsWithFiles = [(Just filename, DiagInfo J.DsWarning rng msg pat) | (filename, rng, (msg, pat)) <- parsedWarnings ]
+      case groupByFst $ diagsWithFiles ++ errorDiags of
         [(relFile, diagInfo)] -> do
-          absFile <- liftIO $ canonicalizePath relFile
-          let nuri' = toNuri absFile
+          nuri' <- liftIO $ maybe (pure nuriCurrent) (fmap toNuri . canonicalizePath) relFile
           --
           mdoc <- getVirtualFile nuri'
           fileText <- case mdoc of
@@ -840,7 +858,7 @@ handleWarnings logger parsedWarnings =  do
             Nothing -> do
               debugM logger "foo" $ "Couldn't find file: " ++ show relFile
               pure Nothing
-          let diags = [diagFor J.DsWarning (guessRange range ident fileText) msg | (range, (msg, ident)) <- diagInfo]
+          let diags = [diagFor sev (guessRange rng ident fileText) msg | DiagInfo sev rng msg ident <- diagInfo]
           -- publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
           return $ Just (nuri', diags)
         _ -> Nothing <$ warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
