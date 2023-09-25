@@ -747,7 +747,10 @@ groupByFst = map (\xs -> (fst (head xs), map snd xs)) . List.groupBy ((==) `on` 
 -- This might resolve the issue with errors disappearing
 
 mkSrcName :: J.NormalizedUri -> J.DiagnosticSource
-mkSrcName nuri = "gf-compiler: " <> T.pack (show nuri)
+mkSrcName nuri = "gf-compiler: " <> T.pack (show filepath)
+  where
+    nfpath = J.uriToNormalizedFilePath nuri
+    filepath = J.fromNormalizedFilePath <$> nfpath
 
 mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
   -> GF.Options -> J.Uri -> IndentForest -> Either SomeException (GF.Err CompileEnv)
