@@ -773,6 +773,8 @@ mkDiagnostics logger _ doc warningForest (Right (GF.Ok x)) = do
   if null parsedWarnings
     then flushDiagnosticsBySource 100 $ Just srcName
     else do
+      -- Flush diagnostics always to ensure diagnostics in other files get cleared
+      flushDiagnosticsBySource 100 $ Just srcName
       mbdiags <- handleWarnings logger nuri parsedWarnings []
       case mbdiags of
         Nothing -> pure ()
