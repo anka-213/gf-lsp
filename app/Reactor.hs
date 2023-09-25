@@ -117,7 +117,7 @@ outputDir = ".gf-lsp"
 -- DONE: Show concrete types on hover
 -- TODO: Write tests
 -- WONTFIX: Figure out why compilation of this is slow
--- TODO: Allow going to definition of modules
+-- DONE: Allow going to definition of modules
 -- TODO: Catch all errors in handlers
 -- DONE: Make GF_LIB_PATH a config option
 --       Or maybe figure it out using the gf executable
@@ -578,8 +578,14 @@ handle logger = mconcat
               case map location $ matag ++ mtag of
                 [] -> do
                   warningM logger "reactor.handle" "Failed to find tag"
-                  -- Warning already handled
-                  responder $ Right $ J.InR $ J.InL $ J.List []
+                  -- Check if module name
+                  case Map.lookup (GF.moduleNameS $ T.unpack fullWord) (GF.moduleMap gr) of
+                    Nothing -> responder $ Right $ J.InR $ J.InL $ J.List []
+                    Just foundMod -> do
+                      let src = GF.msrc foundMod
+                      let uri = J.filePathToUri src :: J.Uri
+                      let loc = J.Location uri (mkRange 1 1 1 1)
+                      responder $ Right $ J.InR $ J.InL $ J.List [loc]
                 tagThings -> do
                   let getLoc fil0 tag0 = case tag0 of
                         GF.Local l c -> pure (fil0, l,c)
