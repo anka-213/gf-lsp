@@ -779,12 +779,12 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
   debugM logger "Warnings parsed" . show $ parsedWarnings
 
   -- mapM_ (mapM_ (debugM logger "error msg" . show) . fst) $ readP_to_S parseForestFinal msg
-  -- liftIO $ hPrint stderr msg
+  -- debugM logger "" $ show $ msg
   -- liftIO $ mapM_ (mapM_ (hPrint stderr) . fst) $ readP_to_S parseForestFinal msg
   -- let parsedWarnings = parseWarnings =<< warningForest
-  -- liftIO $ hPrint stderr warningForest
-  -- liftIO $ hPrint stderr parsedWarnings
-  -- liftIO $ hPrint stderr $ J.toNormalizedUri doc
+  -- debugM logger "" $ show $ warningForest
+  -- debugM logger "" $ show $ parsedWarnings
+  -- debugM logger "" $ show $ J.toNormalizedUri doc
   let
     nuri = J.toNormalizedUri doc
     msgs = splitErrors msg
@@ -798,8 +798,9 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
     diags = zipWith (diagFor J.DsError) ranges msgs
   absFiles <- liftIO $ mapM (mapM canonicalizePath) relFiles
   -- absFiles <- liftIO $ mapM (getRealFile opts) relFiles
-  liftIO $ hPrint stderr relFiles
-  liftIO $ hPrint stderr absFiles
+  debugM logger "" $ "relFiles: " ++ show relFiles
+  debugM logger "" $ "absFiles: " ++ show absFiles
+
 
   let
     nuris = map (maybe nuri toNuri) absFiles
@@ -809,13 +810,15 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
   when (isNothing (allEqual nuris)) $ do
     warningM logger "" "Ignored errors from other files"
 
-  liftIO $ hPrint stderr nuris
+  debugM logger "" $ show nuris
 
   wdiags <- maybe [] snd <$> handleWarnings logger nuri parsedWarnings fileDiags
+  debugM logger "errorMsgs" $ "diags:  " ++ show diags
+  debugM logger "errorMsgs" $ "wdiags: " ++ show wdiags
   publishDiagnostics 100 nuri' Nothing (partitionBySource $ diags ++ wdiags)
 
 data DiagInfo = DiagInfo {
-  severity :: J.DiagnosticSeverity,
+  diagSeverity :: J.DiagnosticSeverity,
   diagRange :: Maybe J.Range,
   diagMsg :: String,
   searchToken :: Maybe String -- ^ A token to search for to replace range
@@ -838,7 +841,7 @@ handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
           fileText <- case mdoc of
             Just vf -> do
               let fileText = virtualFileText vf
-              debugM logger "foo" $ "Found file: " ++ show fileText
+              debugM logger "foo" $ "Found file: " ++ take 100 (show fileText) ++ " ..."
               pure $ Just $ T.unpack fileText -- TODO: Make this more efficient
             Nothing -> do
               debugM logger "foo" $ "Couldn't find file: " ++ show relFile
