@@ -17,10 +17,10 @@
         "homepage": "https://www.grammaticalframework.org/",
         "owner": "GrammaticalFramework",
         "repo": "gf-core",
-        "rev": "86af7b12b3f9f9f712ddcf19973cfb1a80042aa9",
-        "sha256": "0h73l99zwjjdfw04db5l8ix04p00c0n838z7xk3ip60pbbl41n6a",
+        "rev": "7d9015e2e159b376cf2ba8332093c9623375557e",
+        "sha256": "1bzsg4zrja5rndig5f4iq67lkfh61n38cac4sl5sbrfajj9lbvkm",
         "type": "tarball",
-        "url": "https://github.com/GrammaticalFramework/gf-core/archive/86af7b12b3f9f9f712ddcf19973cfb1a80042aa9.tar.gz",
+        "url": "https://github.com/GrammaticalFramework/gf-core/archive/7d9015e2e159b376cf2ba8332093c9623375557e.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "nixpkgs": {
