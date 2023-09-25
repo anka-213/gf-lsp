@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -54,7 +53,7 @@ import           Language.LSP.VFS
 import           System.Exit
 import qualified System.Process as Process
 import System.IO
-    ( stdin, stderr, stdout, hPrint )
+    ( stdin, stderr, stdout)
 -- import System.Log.Logger
 --     ( errorM, debugM, removeAllHandlers, Priority(DEBUG), warningM )
 import           Control.Concurrent
@@ -129,7 +128,7 @@ outputDir = ".gf-lsp"
 -- TODO: Show hover types/definitions for types as well
 -- TODO: Handle cancellation
 -- TODO: Add timeout and multithreading
--- TODO: Make proper releases with tags
+-- DONE: Make proper releases with tags
 -- TODO: Check for issues with workspaces
 -- TODO: Make output less spammy
 
@@ -796,7 +795,6 @@ mkDiagnostics logger _ doc warningForest (Right (GF.Ok x)) = do
   pure ()
 mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
 
-  rootPath <- getRootPath
   warningM logger "reactor.handle" $ "Got error:\n" <> msg
 
   -- flushDiagnosticsBySource 100 $ Just "lsp-hello"
@@ -816,34 +814,14 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
   -- debugM logger "" $ show $ J.toNormalizedUri doc
   let
     nuri = J.toNormalizedUri doc
-    sourceName = mkSrcName rootPath nuri
     msgs = splitErrors msg
     fileDiags =
       [ (relFile, DiagInfo J.DsError (Just range) msg1 Nothing)
       | msg1 <- msgs
       , let (relFile, range) = maybe (Nothing, defRange) (first Just) . parseErrorMessage $ msg1
       ]
-    rangeFor = maybe (Nothing, defRange) (first Just) . parseErrorMessage
-    (relFiles, ranges) = unzip $ map rangeFor msgs
-    diags = zipWith (diagFor sourceName J.DsError) ranges msgs
-  absFiles <- liftIO $ mapM (mapM canonicalizePath) relFiles
-  -- absFiles <- liftIO $ mapM (getRealFile opts) relFiles
-  debugM logger "" $ "relFiles: " ++ show relFiles
-  debugM logger "" $ "absFiles: " ++ show absFiles
 
-
-  let
-    nuris = map (maybe nuri toNuri) absFiles
-    nuri' :: J.NormalizedUri
-    nuri' = fromMaybe nuri (allEqual nuris) -- TODO: Do something better when they are not all equal
-    -- fps = fromMaybe (error "BUG: fromMaybe") <$> map (J.uriToFilePath . J.fromNormalizedUri) nuris
-  when (isNothing (allEqual nuris)) $ do
-    warningM logger "" "Ignored errors from other files"
-
-  debugM logger "" $ show nuris
-
-  wdiags <- maybe [] snd <$> handleWarnings logger nuri parsedWarnings fileDiags
-  debugM logger "errorMsgs" $ "diags:  " ++ show diags
+  (nuri', wdiags) <- fromMaybe (nuri,[]) <$> handleWarnings logger nuri parsedWarnings fileDiags
   debugM logger "errorMsgs" $ "wdiags: " ++ show wdiags
   publishDiagnostics 100 nuri' Nothing (partitionBySource wdiags)
 
