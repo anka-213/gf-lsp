@@ -726,12 +726,12 @@ setCompileEnv newEnv = do
     writeTVar envV newEnv
 
 -- | Make a simple diagnostic from a severity, a range and a string
-diagFor :: J.DiagnosticSeverity -> J.Range -> String -> J.Diagnostic
-diagFor severity rng msg = J.Diagnostic
+diagFor :: J.DiagnosticSource -> J.DiagnosticSeverity -> J.Range -> String -> J.Diagnostic
+diagFor src severity rng msg = J.Diagnostic
           rng
           (Just severity)  -- severity
           Nothing  -- code
-          (Just "gf-parser") -- source
+          (Just src) -- source
           (T.pack msg)
           Nothing -- tags
           (Just (J.List []))
@@ -746,6 +746,9 @@ groupByFst = map (\xs -> (fst (head xs), map snd xs)) . List.groupBy ((==) `on` 
 -- TODO: Handle multiple error files at the same time
 -- This might resolve the issue with errors disappearing
 
+mkSrcName :: J.NormalizedUri -> J.DiagnosticSource
+mkSrcName nuri = "gf-compiler: " <> T.pack (show nuri)
+
 mkDiagnostics :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
   -> GF.Options -> J.Uri -> IndentForest -> Either SomeException (GF.Err CompileEnv)
   -> LspT LspContext IO ()
@@ -755,10 +758,11 @@ mkDiagnostics logger _opts _doc _warnings (Left (SomeException inner)) = do
   pure ()
 mkDiagnostics logger _ doc warningForest (Right (GF.Ok x)) = do
   let nuri = J.toNormalizedUri doc
+  let srcName = mkSrcName nuri
   setCompileEnv x
   let parsedWarnings = parseWarnings =<< warningForest
   if null parsedWarnings
-    then flushDiagnosticsBySource 100 $ Just "gf-parser"
+    then flushDiagnosticsBySource 100 $ Just srcName
     else do
       mbdiags <- handleWarnings logger nuri parsedWarnings []
       case mbdiags of
@@ -787,6 +791,7 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
   -- debugM logger "" $ show $ J.toNormalizedUri doc
   let
     nuri = J.toNormalizedUri doc
+    sourceName = mkSrcName nuri
     msgs = splitErrors msg
     fileDiags =
       [ (relFile, DiagInfo J.DsError (Just range) msg1 Nothing)
@@ -795,7 +800,7 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
       ]
     rangeFor = maybe (Nothing, defRange) (first Just) . parseErrorMessage
     (relFiles, ranges) = unzip $ map rangeFor msgs
-    diags = zipWith (diagFor J.DsError) ranges msgs
+    diags = zipWith (diagFor sourceName J.DsError) ranges msgs
   absFiles <- liftIO $ mapM (mapM canonicalizePath) relFiles
   -- absFiles <- liftIO $ mapM (getRealFile opts) relFiles
   debugM logger "" $ "relFiles: " ++ show relFiles
@@ -832,6 +837,7 @@ handleWarnings :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
     -> [(Maybe FilePath, DiagInfo)]
     -> LspT LspContext IO (Maybe (J.NormalizedUri, [J.Diagnostic]))
 handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
+      let srcName = mkSrcName nuriCurrent
       let diagsWithFiles = [(Just filename, DiagInfo J.DsWarning rng msg pat) | (filename, rng, (msg, pat)) <- parsedWarnings ]
       case groupByFst $ diagsWithFiles ++ errorDiags of
         [(relFile, diagInfo)] -> do
@@ -846,7 +852,7 @@ handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
             Nothing -> do
               debugM logger "foo" $ "Couldn't find file: " ++ show relFile
               pure Nothing
-          let diags = [diagFor sev (guessRange rng ident fileText) msg | DiagInfo sev rng msg ident <- diagInfo]
+          let diags = [diagFor srcName sev (guessRange rng ident fileText) msg | DiagInfo sev rng msg ident <- diagInfo]
           -- publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
           return $ Just (nuri', diags)
         _ -> Nothing <$ warningM logger "mkDiagnostrics" "Got diagnostics for mutiple files"
