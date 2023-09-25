@@ -823,7 +823,7 @@ mkDiagnostics logger _opts doc _warnings (Right (GF.Bad msg)) = do
   wdiags <- maybe [] snd <$> handleWarnings logger nuri parsedWarnings fileDiags
   debugM logger "errorMsgs" $ "diags:  " ++ show diags
   debugM logger "errorMsgs" $ "wdiags: " ++ show wdiags
-  publishDiagnostics 100 nuri' Nothing (partitionBySource $ diags ++ wdiags)
+  publishDiagnostics 100 nuri' Nothing (partitionBySource wdiags)
 
 data DiagInfo = DiagInfo {
   diagSeverity :: J.DiagnosticSeverity,
@@ -842,7 +842,8 @@ handleWarnings :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
 handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
       let srcName = mkSrcName nuriCurrent
       let diagsWithFiles = [(Just filename, DiagInfo J.DsWarning rng msg pat) | (filename, rng, (msg, pat)) <- parsedWarnings ]
-      case groupByFst $ diagsWithFiles ++ errorDiags of
+      -- Error diagnostics first to ensure they are included
+      case groupByFst $ errorDiags ++ diagsWithFiles of
         [(relFile, diagInfo)] -> do
           nuri' <- liftIO $ maybe (pure nuriCurrent) (fmap toNuri . canonicalizePath) relFile
           --
