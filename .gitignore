@@ -38,3 +38,6 @@ result
 
 test-chroot
 nix-links
+
+# haskell-gtl-nl
+.repos
