@@ -711,7 +711,10 @@ callGF logger doc (Just filename) = do
 
   -- Change term to prevent GF from outputting colors
   liftIO $ setEnv "TERM" ""
-  (errOut, (output, r)) <- liftIO $ captureStdErr $ captureStdout $ E.try @SomeException $ GF.tryIOE $ compileModule opts cEnv filename
+  -- sendNotification J.SProgress $ _
+  (errOut, (output, r)) <-
+    withIndefiniteProgress ("Compiling " <> T.pack filename) Cancellable $
+      liftIO $ captureStdErr $ captureStdout $ E.try @SomeException $ GF.tryIOE $ compileModule opts cEnv filename
   debugM logger "reactor.handle" "Ran GF"
   debugM logger "reactor.handle" $ "Got stderr: " ++ show errOut
   debugM logger "reactor.handle" $ "Got stdout: " ++ show output
@@ -721,11 +724,16 @@ callGF logger doc (Just filename) = do
   case r of
     Right (GF.Ok _) -> pure ()
     _ -> do
-      (_, (_, r')) <- liftIO $ captureStdErr $ captureStdout $ E.try @SomeException $ GF.tryIOE $ compileModule opts2 cEnv filename
+      (_, (_, r')) <- do
+        debugM logger "reactor.handle" "Compilation failed, loading cached data"
+        liftIO $ captureStdErr $ captureStdout $ E.try @SomeException $ GF.tryIOE $ compileModule opts2 cEnv filename
       case r' of
-        Right (GF.Ok x) ->
+        Right (GF.Ok x) -> do
+          debugM logger "reactor.handle" "Loaded cached data"
           setCompileEnv x
-        _ -> pure ()
+        _ -> do
+          debugM logger "reactor.handle" "Failed to load cached data"
+          pure ()
 
 
   -- Try parsing the warnings
