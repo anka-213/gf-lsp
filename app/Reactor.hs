@@ -88,6 +88,7 @@ import qualified System.IO.Error as E
 import Data.Char (isDigit, isAsciiLower, isAsciiUpper)
 import Data.Foldable (Foldable(toList))
 import qualified System.FilePath as FP
+import GF.Infra.Option (Recomp(NeverRecomp))
 -- import Debug.Trace (traceM, traceShowId)
 
 
@@ -714,6 +715,18 @@ callGF logger doc (Just filename) = do
   debugM logger "reactor.handle" "Ran GF"
   debugM logger "reactor.handle" $ "Got stderr: " ++ show errOut
   debugM logger "reactor.handle" $ "Got stdout: " ++ show output
+  -- TODO: Be more fine-grained by updating every module as soon as it's available
+  let opts2 = GF.addOptions opts $ GF.modifyFlags $ \flags -> flags
+        { GF.optRecomp = NeverRecomp } -- If compilation failed, load cache
+  case r of
+    Right (GF.Ok _) -> pure ()
+    _ -> do
+      (_, (_, r')) <- liftIO $ captureStdErr $ captureStdout $ E.try @SomeException $ GF.tryIOE $ compileModule opts2 cEnv filename
+      case r' of
+        Right (GF.Ok x) ->
+          setCompileEnv x
+        _ -> pure ()
+
 
   -- Try parsing the warnings
   let warningForest = case traceShowId $ readP_to_S parseForestFinal errOut of
