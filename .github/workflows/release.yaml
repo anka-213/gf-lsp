@@ -43,10 +43,10 @@ jobs:
       #   # Don't build the non-static version on macos
       #   if: ${{ matrix.os == 'ubuntu-latest' }}
       - name: Build redistributable for MacOS
-        run: nix build -v -L -f . gf-lsp-redistributable --extra-experimental-features nix-command -o result-redistributable
+        run: nix build -L -f . gf-lsp-redistributable --extra-experimental-features nix-command -o result-redistributable
         if: ${{ matrix.os == 'macos-latest' }}
       - name: Make bundle for linux
-        run: nix bundle -v -f . exe --extra-experimental-features 'nix-command flakes' -o result-lsp-bundle
+        run: nix bundle -f . exe --extra-experimental-features 'nix-command flakes' -o result-lsp-bundle
         if: ${{ matrix.os == 'ubuntu-latest' }}
       - uses: actions/upload-artifact@v2
         with:
