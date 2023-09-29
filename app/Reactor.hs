@@ -861,7 +861,6 @@ handleWarnings :: LogAction (LspT LspContext IO) (WithSeverity T.Text)
     -> LspT LspContext IO ()
 handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
       rootPath <- getRootPath
-      let srcName = mkSrcName rootPath nuriCurrent
       let diagsWithFiles = [(Just filename, DiagInfo J.DsWarning rng msg pat) | (filename, rng, (msg, pat)) <- parsedWarnings ]
       -- Error diagnostics first to ensure they are included
 
@@ -886,6 +885,7 @@ handleWarnings logger nuriCurrent parsedWarnings errorDiags =  do
             Nothing -> do
               debugM logger "foo" $ "Couldn't find file: " ++ show nuri'
               pure Nothing
+          let srcName = mkSrcName rootPath nuri'
           let diags = [diagFor srcName sev (guessRange rng ident fileText) msg | DiagInfo sev rng msg ident <- diagInfo]
           -- publishDiagnostics 100 nuri' Nothing (partitionBySource diags)
           -- return $ Just (nuri', diags)
