@@ -1,0 +1,1 @@
+nix-shell --run "find app/ -name '*.hs'  | entr -cs 'cabal build && cabal install --overwrite-policy=always; '"
