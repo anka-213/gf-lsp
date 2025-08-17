@@ -39,8 +39,8 @@ executable gf-lsp
                     , co-log-core
                     -- , co-log-concurrent
                     , lens
-                    , lsp
-                    , lsp-types
+                    , lsp < 2
+                    , lsp-types < 2
                     , prettyprinter
                     , process
                     , split
