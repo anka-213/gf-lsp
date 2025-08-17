@@ -14,6 +14,7 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
+          - macos-13
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -99,7 +100,6 @@ jobs:
 
               after that reload your editor to make the lsp extension find the executable.
 
-              If you are on a M1 or M2 silicon mac, follow the [instructions in the readme](https://github.com/anka-213/gf-vscode/blob/main/README.md#nix-mac-or-linux) for using nix
             # Changelog
           files: |
             *.gz
