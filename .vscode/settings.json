@@ -1,6 +1,6 @@
 {
     "nixEnvSelector.nixFile": "${workspaceRoot}/shell.nix",
-    "haskell.serverExecutablePath": "${workspaceFolder}/nix-links/shell-nix/bin/haskell-language-server",
+    // "haskell.serverExecutablePath": "${workspaceFolder}/nix-links/shell-nix/bin/haskell-language-server",
     "files.watcherExclude": {
         "**/.git/objects/**": true,
         "**/.git/subtree-cache/**": true,
