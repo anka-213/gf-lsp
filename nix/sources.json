@@ -5,10 +5,10 @@
         "homepage": null,
         "owner": "qnikst",
         "repo": "co-log-concurrent",
-        "rev": "80773eba967a59d3618ea022d7060d5329f6f3e8",
-        "sha256": "1pi1ydx6k4p0vzqb2h05kzk7gwnwi77m4xc76wphd0g0apdkdqp8",
+        "rev": "3c72ed2d0eb89d5bf2fc715f4ad2c5a690c0ba4c",
+        "sha256": "1djrpjdq6lyrdvdh8hya1k9f08fj0nbj99vxmrx0yq3q6jfyszij",
         "type": "tarball",
-        "url": "https://github.com/qnikst/co-log-concurrent/archive/80773eba967a59d3618ea022d7060d5329f6f3e8.tar.gz",
+        "url": "https://github.com/qnikst/co-log-concurrent/archive/3c72ed2d0eb89d5bf2fc715f4ad2c5a690c0ba4c.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "gf-core": {
@@ -17,10 +17,10 @@
         "homepage": "https://www.grammaticalframework.org/",
         "owner": "GrammaticalFramework",
         "repo": "gf-core",
-        "rev": "7d9015e2e159b376cf2ba8332093c9623375557e",
-        "sha256": "1bzsg4zrja5rndig5f4iq67lkfh61n38cac4sl5sbrfajj9lbvkm",
+        "rev": "fa2826d29a8a18df2a4394cbdab1261d070b5c48",
+        "sha256": "0mlvicxaxsn3ik88rp0qzg5vifvlwl1b0cf4vxzddqa3glr39sm3",
         "type": "tarball",
-        "url": "https://github.com/GrammaticalFramework/gf-core/archive/7d9015e2e159b376cf2ba8332093c9623375557e.tar.gz",
+        "url": "https://github.com/GrammaticalFramework/gf-core/archive/fa2826d29a8a18df2a4394cbdab1261d070b5c48.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "nixpkgs": {
@@ -29,10 +29,10 @@
         "homepage": null,
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "750fc50bfd132a44972aa15bb21937ae26303bc4",
-        "sha256": "1v6xf8pbhckyvxxr5ljm16mz7fircfl81bzhsqf555xjvqpb3a8d",
+        "rev": "32f313e49e42f715491e1ea7b306a87c16fe0388",
+        "sha256": "1z4ga87qla5300qwib3dnjnkaywwh8y1qqsb8w2mrsrw78k9xmlw",
         "type": "tarball",
-        "url": "https://github.com/nixos/nixpkgs/archive/750fc50bfd132a44972aa15bb21937ae26303bc4.tar.gz",
+        "url": "https://github.com/nixos/nixpkgs/archive/32f313e49e42f715491e1ea7b306a87c16fe0388.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
