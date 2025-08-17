@@ -1,4 +1,4 @@
-{ system ? builtins.currentSystem, compiler ? "ghc92" }:
+{ system ? builtins.currentSystem, compiler ? "ghc96" }:
 let
   sources = import ./nix/sources.nix;
   pkgs = import sources.nixpkgs { inherit system; };
