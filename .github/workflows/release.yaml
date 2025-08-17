@@ -68,7 +68,8 @@ jobs:
       - name: Create gz archives
         run: |
           # ${GITHUB_REF##*/}
-          mv gf-lsp-macos-latest/result-redistributable/bin/gf-lsp gf-lsp-${GITHUB_REF##*/}-MacOS-x64
+          mv gf-lsp-macos-latest/result-redistributable/bin/gf-lsp gf-lsp-${GITHUB_REF##*/}-MacOS-arm64
+          mv gf-lsp-macos-13/result-redistributable/bin/gf-lsp gf-lsp-${GITHUB_REF##*/}-MacOS-x64
           mv gf-lsp-ubuntu-latest/result-lsp-bundle gf-lsp-${GITHUB_REF##*/}-Linux-x64
           # gf-lsp-${GITHUB_REF##*/}-MacOS-x64
           # mv gf-lsp-macos-latest/result-redistributable/bin/gf-lsp gf-lsp-macos-latest/gf-lsp
@@ -80,6 +81,7 @@ jobs:
           # tar caf gf-lsp-MacOS-x64.tar.gz gf-lsp-${GITHUB_REF##*/}-MacOS-x64
           # tar caf gf-lsp-Linux-x64.tar.gz gf-lsp-${GITHUB_REF##*/}-Linux-x64
           gzip -c gf-lsp-${GITHUB_REF##*/}-MacOS-x64 > gf-lsp-MacOS-x64.gz
+          gzip -c gf-lsp-${GITHUB_REF##*/}-MacOS-arm64 > gf-lsp-MacOS-arm64.gz
           gzip -c gf-lsp-${GITHUB_REF##*/}-Linux-x64 > gf-lsp-Linux-x64.gz
 
       - name: Release
