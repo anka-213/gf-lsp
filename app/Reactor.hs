@@ -143,6 +143,8 @@ outputDir = ".gf-lsp"
 -- TODO: Remove duplicates in the grammar. Each time a grammar is loaded, another copy is added
 -- TODO: Don't show duplicate error messages in the same file when it's loaded indeirctly from multiple sources
 
+-- TODO: Line number for "Module not found" errors
+
 -- ---------------------------------------------------------------------
 
 data LspContext = LspContext { compileEnv :: TVar CompileEnv , config :: Config }
