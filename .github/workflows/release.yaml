@@ -18,12 +18,12 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: nixbuild/nix-quick-install-action@v24
+      - uses: actions/checkout@v4
+      - uses: nixbuild/nix-quick-install-action@v32
         with:
-          nix_version: "2.16.1"
+          nix_version: "2.28.4"
           # nix_conf: features = nix-command
-      - uses: cachix/cachix-action@v10
+      - uses: cachix/cachix-action@v16
         with:
           name: anka-213
           # # If you chose signing key for write access
@@ -45,11 +45,11 @@ jobs:
       #   if: ${{ matrix.os == 'ubuntu-latest' }}
       - name: Build redistributable for MacOS
         run: nix build -L -f . gf-lsp-redistributable --extra-experimental-features nix-command -o result-redistributable
-        if: ${{ matrix.os == 'macos-latest' }}
+        if: ${{ startsWith(matrix.os, 'macos-') }}
       - name: Make bundle for linux
         run: nix bundle -f . exe --extra-experimental-features 'nix-command flakes' -o result-lsp-bundle
         if: ${{ matrix.os == 'ubuntu-latest' }}
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: gf-lsp-${{ matrix.os }}
             # result/bin/gf-lsp
@@ -63,7 +63,7 @@ jobs:
     # if: github.ref == 'refs/heads/main'
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
       - run: ls -lR
       - name: Create gz archives
         run: |
@@ -83,7 +83,7 @@ jobs:
           gzip -c gf-lsp-${GITHUB_REF##*/}-Linux-x64 > gf-lsp-Linux-x64.gz
 
       - name: Release
-        uses: softprops/action-gh-release@v0.1.15
+        uses: softprops/action-gh-release@v2
         # if: startsWith(github.ref, 'refs/tags/')
         with:
           # prerelease: true
