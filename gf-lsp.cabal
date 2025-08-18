@@ -49,42 +49,42 @@ executable gf-lsp
                     , time
                     , unordered-containers
 
--- test-suite gf-lsp-tests
---   type:             exitcode-stdio-1.0
---   hs-source-dirs:   test,app
---   main-is:          Main.hs
---   default-language: Haskell2010
---   ghc-options:      -Wall -threaded
---   other-modules:      GFExtras
---                     , GFTags
---                     , Reactor
---   build-depends:    base >=4.11 && < 5
---                   , gf-lsp
---                   , hedgehog
---                   , lsp-test
---                   , tasty
---                   , tasty-hunit
---                   , tasty-hedgehog
---                   , raw-strings-qq
+test-suite gf-lsp-tests
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test,app
+  main-is:          Main.hs
+  default-language: Haskell2010
+  ghc-options:      -Wall -threaded
+  other-modules:      GFExtras
+                    , GFTags
+                    , Reactor
+  build-depends:    base >=4.11 && < 5
+                  , gf-lsp
+                  , hedgehog
+                  , lsp-test
+                  , tasty
+                  , tasty-hunit
+                  , tasty-hedgehog
+                  , raw-strings-qq
 
---                   -- TODO: Use an actual library or something
---                   -- Copied from executable above
---                     , aeson
---                     , containers
---                     , directory
---                     , filepath
---                     , gf
---                     -- , hslogger
---                     , co-log-core
---                     -- , co-log-concurrent
---                     , lens
---                     , lsp
---                     , lsp-types
---                     , prettyprinter
---                     , process
---                     , split
---                     , stm
---                     , text
---                     , time
---                     , unordered-containers
+                  -- TODO: Use an actual library or something
+                  -- Copied from executable above
+                    , aeson
+                    , containers
+                    , directory
+                    , filepath
+                    , gf
+                    -- , hslogger
+                    , co-log-core
+                    -- , co-log-concurrent
+                    , lens
+                    , lsp
+                    , lsp-types
+                    , prettyprinter
+                    , process
+                    , split
+                    , stm
+                    , text
+                    , time
+                    , unordered-containers
 

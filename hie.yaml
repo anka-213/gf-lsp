@@ -1,0 +1,10 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:gf-lsp"
+
+    - path: "./app"
+      component: "gf-lsp:exe:gf-lsp"
+
+    - path: "./test"
+      component: "gf-lsp:test:gf-lsp-tests"
