@@ -3,7 +3,7 @@
 
 module Main where
 
-import           Hedgehog
+-- import           Hedgehog
 -- import Hedgehog.Main
 import           GfLsp
 -- import Language.LSP.Test
@@ -16,10 +16,6 @@ import Data.Bifunctor (first)
 import qualified Language.LSP.Types as J
 
 
-
-prop_test :: Property
-prop_test = property $ do
-  doGfLsp === "GfLsp"
 
 main :: IO ()
 main = Tasty.defaultMain tests

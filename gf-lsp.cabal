@@ -63,11 +63,11 @@ test-suite gf-lsp-tests
                     , CaptureStdio
   build-depends:    base >=4.11 && < 5
                   , gf-lsp
-                  , hedgehog
+                  -- , hedgehog
                   , lsp-test
                   , tasty
                   , tasty-hunit
-                  , tasty-hedgehog
+                  -- , tasty-hedgehog
                   , raw-strings-qq
 
                   -- TODO: Use an actual library or something
