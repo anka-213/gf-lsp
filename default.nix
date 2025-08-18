@@ -79,6 +79,7 @@ let
               # )
               ./nix/expose-all.patch
               ./nix/revert-new-cabal-madness.patch
+              ./nix/bump-bounds.patch
             ];
             jailbreak = true;
             # executableSystemDepends = [
