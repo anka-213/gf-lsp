@@ -151,6 +151,7 @@ let
         mkdir -p $out/bin
         cp ${pkgs.haskell.lib.dontCheck myHaskellPackages.gf-lsp-static}/bin/gf-lsp $out/bin/
         # get the list of dynamic libs from otool and tidy the output
+        ${otool} -L $out/bin/gf-lsp
         libs=$(${otool} -L $out/bin/gf-lsp | tail -n +2 | sed 's/^[[:space:]]*//' | cut -d' ' -f1)
         # get the paths for libncurses and libiconv
         ncurses=$(echo "$libs" | ${grep} '^/nix/store/.*-ncurses')
@@ -161,7 +162,10 @@ let
         chmod 777 $out/bin/gf-lsp
         ${install_name_tool} -change "$ncurses" /usr/lib/libncurses.dylib $out/bin/gf-lsp
         ${install_name_tool} -change "$iconv" /usr/lib/libiconv.dylib $out/bin/gf-lsp
-        ${install_name_tool} -rpath "$rpath" /System/Library/Frameworks $out/bin/gf-lsp
+        if [[ "$(uname -s)" = "Darwin" && "$(uname -v)" = "*X86*" ]]; then
+            ${install_name_tool} -rpath "$rpath" /System/Library/Frameworks $out/bin/gf-lsp
+        fi
+
         chmod 555 $out/bin/gf-lsp
       '';
 
