@@ -63,6 +63,7 @@ import qualified GF
 import qualified GF.Infra.Option as GF
 
 import GFExtras
+import CaptureStdio
 
 import System.Environment (withArgs, setEnv, getEnv)
 import qualified GF.Support as GF
@@ -1138,35 +1139,3 @@ warningM logger tag message = logger <& (tag <> ": " <> T.pack message) `WithSev
 
 errorM ::LogAction m (WithSeverity T.Text) -> T.Text -> String -> m ()
 errorM logger tag message = logger <& (tag <> ": " <> T.pack message) `WithSeverity` Error
-
-captureStdErr :: IO a -> IO (String, a)
-captureStdErr = captureHandleString stderr
-
-captureStdout :: IO a -> IO (String, a)
-captureStdout = captureHandleString stdout
-
-captureHandleString :: Handle -> IO a -> IO (String, a)
-captureHandleString origHandle act = do
-  (readEnd, writeEnd) <- Process.createPipe
-  -- TODO: Read the actual content
-  res <- goBracket act writeEnd origHandle
-  output <- hGetContents' readEnd
-  pure (output, res)
-
-
--- stdoutToStdErr :: IO a -> IO a
--- stdoutToStdErr act = goBracket act stderr stdout
-
--- | Copy a handle to another within a bracket
-goBracket :: IO a -> Handle -> Handle -> IO a
-goBracket go tmpHandle h = do
-  buffering <- hGetBuffering h
-  let redirect = do
-        old <- hDuplicate h
-        hDuplicateTo tmpHandle h
-        return old
-      restore old = do
-        hDuplicateTo old h
-        hSetBuffering h buffering
-        hClose old
-  E.bracket redirect restore (const go)

@@ -28,6 +28,7 @@ executable gf-lsp
   other-modules:      GFExtras
                     , GFTags
                     , Reactor
+                    , CaptureStdio
   build-depends:      base
                     -- , gf-lsp
                     , aeson
@@ -48,6 +49,7 @@ executable gf-lsp
                     , text
                     , time
                     , unordered-containers
+                    , silently
 
 test-suite gf-lsp-tests
   type:             exitcode-stdio-1.0
@@ -58,6 +60,7 @@ test-suite gf-lsp-tests
   other-modules:      GFExtras
                     , GFTags
                     , Reactor
+                    , CaptureStdio
   build-depends:    base >=4.11 && < 5
                   , gf-lsp
                   , hedgehog
@@ -87,4 +90,5 @@ test-suite gf-lsp-tests
                     , text
                     , time
                     , unordered-containers
+                    , silently
 
