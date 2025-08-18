@@ -53,7 +53,7 @@ import           Language.LSP.VFS
 import           System.Exit
 import qualified System.Process as Process
 import System.IO
-    ( stdin, stderr, stdout)
+    ( stdin, stderr, stdout, hPrint)
 -- import System.Log.Logger
 --     ( errorM, debugM, removeAllHandlers, Priority(DEBUG), warningM )
 import           Control.Concurrent
@@ -217,8 +217,8 @@ run = flip E.catches handlers $ do
     handlers = [ E.Handler ioExcept
                , E.Handler someExcept
                ]
-    ioExcept   (e :: E.IOException)       = print e >> return 1
-    someExcept (e :: E.SomeException)     = print e >> return 1
+    ioExcept   (e :: E.IOException)       = hPrint stderr e >> return 1
+    someExcept (e :: E.SomeException)     = hPrint stderr e >> return 1
 
 -- guessLibpath :: LanguageContextEnv LspContext -> IO (LanguageContextEnv LspContext)
 -- guessLibpath = _
