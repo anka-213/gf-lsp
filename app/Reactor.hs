@@ -155,15 +155,24 @@ data Config = Config { fooTheBar :: Maybe Bool, wibbleFactor :: Maybe Int, gfLib
 run :: IO Int
 run = flip E.catches handlers $ do
 
-  rin  <- atomically newTChan :: IO (TChan ReactorInput)
-  cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
-  -- LC.withBackgroundLogger
-
   -- Duplicate the stdout and stderr handle so we can capture them without getting a mixup
   -- This can still cause confusion if we call GF twice at the same time
   realStdout <- hDuplicate stdout
   realStderr <- hDuplicate stderr
 
+  runWithHandles realStdout realStderr
+
+  where
+    handlers = [ E.Handler ioExcept
+               , E.Handler someExcept
+               ]
+    ioExcept   (e :: E.IOException)       = hPrint stderr e >> return 1
+    someExcept (e :: E.SomeException)     = hPrint stderr e >> return 1
+
+runWithHandles :: Handle -> Handle -> IO Int
+runWithHandles realStdout realStderr = do
+  rin  <- atomically newTChan :: IO (TChan ReactorInput)
+  cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
   let
     -- Three loggers:
     -- 1. To stderr
@@ -213,12 +222,6 @@ run = flip E.catches handlers $ do
     realStdout
     serverDefinition
 
-  where
-    handlers = [ E.Handler ioExcept
-               , E.Handler someExcept
-               ]
-    ioExcept   (e :: E.IOException)       = hPrint stderr e >> return 1
-    someExcept (e :: E.SomeException)     = hPrint stderr e >> return 1
 
 -- guessLibpath :: LanguageContextEnv LspContext -> IO (LanguageContextEnv LspContext)
 -- guessLibpath = _
