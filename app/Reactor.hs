@@ -697,6 +697,7 @@ callGF logger doc (Just filename) = do
   debugM logger "reactor.handle" $ "Starting gf for " ++ filename
 
   liftIO $ createDirectoryIfMissing False outputDir
+  liftIO $ writeFile (outputDir ++ "/.gitignore") "*"
   cfg <- config <$> getConfig
   -- optOutputDir
   -- optGFODir
