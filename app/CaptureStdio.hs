@@ -3,20 +3,23 @@ module CaptureStdio (captureStdErr, captureStdout) where
 
 import qualified Control.Exception as E
 import GHC.IO.Handle
-import System.IO (stdin, stderr, stdout)
+import System.IO (stderr, stdout)
+import System.Info (os)
 import qualified System.Process as Process
 import qualified System.IO.Silently as Silently
 
 
 captureStdErr :: IO a -> IO (String, a)
+captureStdErr = captureHandle stderr
 captureStdout :: IO a -> IO (String, a)
-#ifdef WINDOWS
-captureStdErr = Silently.hCapture [stderr]
-captureStdout = Silently.hCapture [stdout]
-#else
-captureStdErr = captureHandleString stderr
-captureStdout = captureHandleString stdout
-#endif
+captureStdout = captureHandle stdout
+
+captureHandle :: Handle -> IO a -> IO (String, a)
+captureHandle handle =
+    if os == "mingw32" then
+        Silently.hCapture [handle]
+    else
+        captureHandleString handle
 
 captureHandleString :: Handle -> IO a -> IO (String, a)
 captureHandleString origHandle act = do
