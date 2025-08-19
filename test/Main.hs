@@ -1,12 +1,13 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- {-# LANGUAGE TemplateHaskell #-}
 
 module Main where
 
 -- import           Hedgehog
 -- import Hedgehog.Main
-import           GfLsp
--- import Language.LSP.Test
+-- import           GfLsp
+import           Language.LSP.Test
 import           Reactor
 import           Test.Tasty                   as Tasty
 import           Test.Tasty.HUnit
@@ -14,6 +15,11 @@ import           Text.ParserCombinators.ReadP (readP_to_S)
 import           Text.RawString.QQ
 import Data.Bifunctor (first)
 import qualified Language.LSP.Types as J
+import qualified System.Process as P
+import Control.Concurrent (forkIO)
+import Control.Monad (void)
+import Control.Monad.IO.Class (liftIO)
+-- import Control.Applicative.Combinators (skipManyTill)
 
 
 
@@ -65,7 +71,59 @@ unitTests = testGroup "Unit tests"
   , testCase "TrailingWhitespace" $ do
       fil <- readFile "test/golden/trailingWhitespace.txt"
       readP_to_S parseForestFinal fil @?= [(warnTrailingWhitespaceExpected, "")]
+  , testCase "Lsp test success" $ do
+      runLspTest lspTest1
+  , testCase "Lsp test failure" $ do
+      runLspTest lspTest2
   ]
+
+
+runLspTest :: Session b -> IO b
+runLspTest test = do
+    (hinRead, hinWrite) <- P.createPipe
+    (houtRead, houtWrite) <- P.createPipe
+
+    _ <- forkIO $ void $ runWithHandles hinRead houtWrite
+    runSessionWithHandles hinWrite houtRead defaultConfig fullCaps "." test
+
+lspTest1 :: Session ()
+lspTest1 = withTimeout 30 $ do
+    doc <- openDoc "test/Foods.gf" "gf"
+    -- liftIO $ print doc
+    hov <- Language.LSP.Test.getHover doc (J.Position 3 3)
+    liftIO $ print hov
+
+    -- Or use one of the helper functions
+    getDocumentSymbols doc >>= liftIO . print
+
+lspTest2 :: Session ()
+lspTest2 = withTimeout 60 $ do
+        doc <- openDoc "test/Params.gf" "gf"
+        liftIO $ print doc
+        liftIO $ putStrLn ""
+
+        -- liftIO $ putStrLn "\nGetting hover"
+        -- hov <- Language.LSP.Test.getHover doc (J.Position 3 3)
+        -- liftIO $ print hov
+        -- liftIO $ putStrLn "Got hover"
+
+        liftIO $ putStrLn "\nGetting diags"
+        diag <- Language.LSP.Test.waitForDiagnostics
+        liftIO $ print diag
+        liftIO $ putStrLn "\nGot diags"
+        -- [J.Diagnostic {J._range = Range {J._start = J.Position {J._line = 2, _character = 0}, _end = Position {_line = 3, _character = 0}}, _severity = Just DsError, _code = Nothing, _source = Just "gf-compiler: test/Params.gf", _message = "test/Params.gf:\n   test/Params.gf:3:\n     Happened in parameter type P\n      cannot find parameter values for Str\n", _tags = Nothing, _relatedInformation = Just []}]
+
+        -- -- Use your favourite favourite combinators.
+        -- skipManyTill loggingNotification (count 1 publishDiagnosticsNotification)
+
+        -- -- Send requests and notifications and receive responses
+        -- rsp <-
+        --   request J.STextDocumentDocumentSymbol $
+        --     J.DocumentSymbolParams Nothing Nothing doc
+        -- liftIO $ print rsp
+
+        -- Or use one of the helper functions
+        -- getDocumentSymbols doc >>= liftIO . print
 
 splitErrorsExpected :: [String]
 splitErrorsExpected =

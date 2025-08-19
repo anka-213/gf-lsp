@@ -158,9 +158,8 @@ run = flip E.catches handlers $ do
   -- Duplicate the stdout and stderr handle so we can capture them without getting a mixup
   -- This can still cause confusion if we call GF twice at the same time
   realStdout <- hDuplicate stdout
-  realStderr <- hDuplicate stderr
 
-  runWithHandles realStdout realStderr
+  runWithHandles stdin realStdout
 
   where
     handlers = [ E.Handler ioExcept
@@ -170,7 +169,9 @@ run = flip E.catches handlers $ do
     someExcept (e :: E.SomeException)     = hPrint stderr e >> return 1
 
 runWithHandles :: Handle -> Handle -> IO Int
-runWithHandles realStdout realStderr = do
+runWithHandles realStdin realStdout = do
+  realStderr <- hDuplicate stderr
+  hPutStr realStderr "hello\n"
   rin  <- atomically newTChan :: IO (TChan ReactorInput)
   cEnv <- newTVarIO emptyCompileEnv :: IO (TVar CompileEnv)
   let
@@ -218,7 +219,7 @@ runWithHandles realStdout realStderr = do
       -- Log to both the client and stderr when we can, stderr beforehand
     (L.cmap (fmap logToText) stderrLogger)
     (L.cmap (fmap logToText) dualLogger)
-    stdin
+    realStdin
     realStdout
     serverDefinition
 
