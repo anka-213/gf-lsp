@@ -96,6 +96,10 @@ jobs:
           cabal configure --enable-tests --enable-benchmarks --test-show-details=direct
           cabal build all
 
+      - name: Test
+        run: |
+          cabal test --enable-tests --enable-benchmarks --test-show-details=direct
+
       - name: Copy
         run: |
           mkdir C:/tmp-dist
